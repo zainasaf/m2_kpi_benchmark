@@ -1,0 +1,144 @@
+---
+title: "kpi"
+author: "Zain"
+date: "2025-03-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(here)
+
+```
+
+```{r}
+
+ kpi <- read.csv(here("data", "kpi_var.csv"))
+```
+
+```{r}
+
+
+## US 
+
+us_trust_all_content_all_media <- kpi %>%
+  select(trust1Q5, trust2Q6, trust3Q7, content_type, gates_compare_other, market) %>% 
+  filter(market== "us")
+
+us_trust_gates_content_all_media <- kpi %>%
+  select(trust1Q5, trust2Q6, trust3Q7, content_type, gates_compare_other, market) %>%
+  filter(market == "us", gates_compare_other ==1)
+
+us_trust_all_content_videos <- kpi %>%
+  select (trust1Q5, trust2Q6, trust3Q7, content_type, gates_compare_other, market) %>%
+  filter(market == "us",  content_type %in% c("youtube", "shorts"))
+
+us_trust_gates_content_videos <-  kpi %>%
+  select (trust1Q5, trust2Q6, trust3Q7, content_type, gates_compare_other, market) %>%
+  filter(market == "us", gates_compare_other == 1,  content_type %in% c("youtube", "shorts"))
+
+us_trust_all_content_articles <- kpi %>%
+  select (trust1Q5, trust2Q6, trust3Q7, content_type, gates_compare_other, market) %>%
+  filter(market == "us", content_type == "article")
+
+us_trust_gates_content_articles <- kpi %>%
+  select (trust1Q5, trust2Q6, trust3Q7, content_type, gates_compare_other, market) %>%
+  filter(market == "us", gates_compare_other == 1,  content_type == "article")
+
+us_trust_all_content_static <- kpi %>%
+select (trust1Q5, trust2Q6, trust3Q7, content_type, gates_compare_other, market) %>%
+  filter(market == "us",  content_type %in% c("threads", "tweet", "instagram", "facebook"))
+         
+
+us_trust_gates_content_static <- kpi %>%
+select (trust1Q5, trust2Q6, trust3Q7, content_type, gates_compare_other, market) %>%
+  filter(market == "us", gates_compare_other == 1, content_type %in% c("threads", "tweet", "instagram", "facebook"))
+         
+
+  
+```
+
+```{r}
+
+# Create a function to generate all dataframes for a specific country
+create_trust_dfs <- function(data, country_code) {
+  # Create a base name for the dataframes
+  base_name <- paste0(country_code, "_trust")
+  
+  # Define the content type groups
+  content_groups <- list(
+    all_media = NULL,  # No additional filtering
+    videos = c("youtube", "shorts"),
+    articles = "article",
+    static = c("threads", "tweet", "instagram", "facebook")
+  )
+  
+  # Create all 8 dataframes in one go
+  result_dfs <- list()
+  
+  for (group_name in names(content_groups)) {
+    content_types <- content_groups[[group_name]]
+    
+    # For all content (no gates filter)
+    df_name_all <- paste0(base_name, "_all_content_", group_name)
+    base_filter <- data %>%
+      select(trust1Q5, trust2Q6, trust3Q7, content_type, gates_compare_other, market) %>%
+      filter(market == country_code)
+    
+    # Apply content type filter if needed
+    if (!is.null(content_types)) {
+      if (length(content_types) == 1) {
+        # Single value
+        result_dfs[[df_name_all]] <- base_filter %>% 
+          filter(content_type == content_types)
+      } else {
+        # Multiple values
+        result_dfs[[df_name_all]] <- base_filter %>% 
+          filter(content_type %in% content_types)
+      }
+    } else {
+      # No content type filter
+      result_dfs[[df_name_all]] <- base_filter
+    }
+    
+    # For gates content
+    df_name_gates <- paste0(base_name, "_gates_content_", group_name)
+    base_filter_gates <- base_filter %>% filter(gates_compare_other == 1)
+    
+    # Apply content type filter if needed
+    if (!is.null(content_types)) {
+      if (length(content_types) == 1) {
+        # Single value
+        result_dfs[[df_name_gates]] <- base_filter_gates %>% 
+          filter(content_type == content_types)
+      } else {
+        # Multiple values
+        result_dfs[[df_name_gates]] <- base_filter_gates %>% 
+          filter(content_type %in% content_types)
+      }
+    } else {
+      # No content type filter
+      result_dfs[[df_name_gates]] <- base_filter_gates
+    }
+  }
+  
+  # Return all dataframes in a list
+  return(result_dfs)
+}
+
+# Create all dataframes for each country
+countries <- c("us", "uk", "rsa", "in")
+all_dfs <- list()
+
+for (country in countries) {
+  country_dfs <- create_trust_dfs(kpi, country)  # Using your kpi dataframe here
+  all_dfs <- c(all_dfs, country_dfs)
+}
+
+# Assign the dataframes to the global environment
+list2env(all_dfs, envir = .GlobalEnv)
+

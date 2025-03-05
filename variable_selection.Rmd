@@ -1,0 +1,35 @@
+---
+title: "KPI Selection of Variables"
+author: "Zain"
+date: "2025-03-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r}
+
+library(tidyvrse)
+library(here)
+
+```
+
+```{r}
+
+read.csv(here("data", 
+
+C:\Users\zaina\Documents\Focal Data\KPI Benchmark
+
+```
+
+
+```{r}
+## brand, trust, issue salience, Inspiration, optimism, sharing, 
+
+  kpi_variables <- m2_main %>%
+  select("brand", "brand1Q10", "brand2Q11", "brand3Q12", "trust", "trust1Q5" "trust2Q6", "trust3Q7", "issue", 
+   "issue1Q13", "issue2Q14","issue3Q15" "inspiration","inspire1Q8","inspire2Q9", "optimistic_happy")
+
+

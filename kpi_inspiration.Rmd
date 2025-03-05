@@ -1,0 +1,123 @@
+---
+title: "kpi_inspiration"
+author: "Zain"
+date: "2025-03-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(here)
+```
+
+```{r} 
+ kpi <- read.csv(here("data", "kpi_var.csv"))
+
+```
+
+
+```{r}
+
+create_inspiration_dfs <- function(data, country_code, audience_var = NULL) {
+  if(is.null(audience_var)) {
+    base_name <- paste0(country_code, "_genpop_inspiration")  # Default to genpop if no audience specified
+  } else {
+    base_name <- paste0(country_code, "_", audience_var, "_inspire")
+  }
+  
+  content_groups <- list(
+    all_media = NULL,  # No additional filtering
+    videos = c("youtube", "shorts"),
+    articles = "article",
+    static = c("threads", "tweet", "instagram", "facebook")
+  )
+  result_dfs <- list()
+  
+  for (group_name in names(content_groups)) {
+    content_types <- content_groups[[group_name]]
+    
+    df_name_all <- paste0(base_name, "_all_content_", group_name)
+    
+    # Create base filter - fixed placement
+    if(is.null(audience_var)) {
+      # No audience variable filtering
+      base_filter <- data %>%
+        select(inspire1Q8, inspire2Q9, content_type, gates_compare_other, market) %>%
+        filter(market == country_code)
+    } else {
+      # With audience variable filtering
+      base_filter <- data %>%
+        select(inspire1Q8, inspire2Q9, content_type, gates_compare_other, market, !!sym(audience_var)) %>%
+        filter(market == country_code, !!sym(audience_var) == 1)
+    }
+    
+    # Apply content type filter if needed
+    if (!is.null(content_types)) {
+      if (length(content_types) == 1) {
+        # Single value
+        result_dfs[[df_name_all]] <- base_filter %>% 
+          filter(content_type == content_types)
+      } else {
+        # Multiple values
+        result_dfs[[df_name_all]] <- base_filter %>% 
+          filter(content_type %in% content_types)
+      }
+    } else {
+      # No content type filter
+      result_dfs[[df_name_all]] <- base_filter
+    }
+    
+    df_name_gates <- paste0(base_name, "_gates_content_", group_name)
+    base_filter_gates <- base_filter %>% filter(gates_compare_other == 1)
+    
+    # Apply content type filter if needed
+    if (!is.null(content_types)) {
+      if (length(content_types) == 1) {
+        # Single value
+        result_dfs[[df_name_gates]] <- base_filter_gates %>% 
+          filter(content_type == content_types)
+      } else {
+        # Multiple values
+        result_dfs[[df_name_gates]] <- base_filter_gates %>% 
+          filter(content_type %in% content_types)
+      }
+    } else {
+      # No content type filter
+      result_dfs[[df_name_gates]] <- base_filter_gates
+    }
+  }
+  
+  return(result_dfs)
+}
+
+# Create all dataframes for each country and audience combination
+countries <- c("us", "uk", "rsa", "in")
+audience_vars <- c("OL", "po_base", "posai", "Base")
+all_dfs <- list()
+
+# create the genpop dataframes (no specific audience filtering)
+for (country in countries) {
+  country_dfs <- create_inspiration_dfs(kpi, country)  # No audience filter
+  all_dfs <- c(all_dfs, country_dfs)
+}
+
+# create dataframes for each specific audience type
+for (country in countries) {
+  for (audience in audience_vars) {
+    country_audience_dfs <- create_inspiration_dfs(kpi, country, audience)
+    all_dfs <- c(all_dfs, country_audience_dfs)
+  }
+}
+
+# Assign the dataframes to the global environment
+list2env(all_dfs, envir = .GlobalEnv)
+
+
+
+
+
+
