@@ -29,11 +29,11 @@ create_inspiration_dfs <- function(data, country_code, audience_var = NULL) {
     base_name <- paste0(country_code, "_", audience_var, "_inspire")
   }
   
-  content_groups <- list(
-    all_media = NULL,  # No additional filtering
-    videos = c("youtube", "shorts"),
-    articles = "article",
-    static = c("threads", "tweet", "instagram", "facebook")
+ content_groups <- list(
+    all_media = NULL,  
+    videos = c("Videos"),
+    articles = ("Articles"),
+    static = c("Social Media")
   )
   result_dfs <- list()
   
@@ -116,8 +116,100 @@ for (country in countries) {
 # Assign the dataframes to the global environment
 list2env(all_dfs, envir = .GlobalEnv)
 
+```
 
+```{r}
+## create function so that is answer 1 to 2 or to both inpration questions
 
+add_inspiration_to_all_dfs <- function() {
+  all_objects <- ls(envir = .GlobalEnv)
+  df_names <- all_objects[sapply(all_objects, function(x) {
+    obj <- get(x)
+    is.data.frame(obj) && all(c("inspire1Q8", "inspire2Q9") %in% names(obj))
+  })]
+  
+  count <- 0
+  
+  # Loop through each data frame and add the inspiration column
+  for (df_name in df_names) {
+    df <- get(df_name, envir = .GlobalEnv)
+    
+    # Calculate inspiration score with distinct column names
+    df$inspiration_score <- rowSums(
+      data.frame(
+        inspiration1 = df$inspire1Q8 %in% c(1, 2),
+        inspiration2 = df$inspire2Q9 %in% c(1, 2)
+      ),
+      na.rm = TRUE
+    )
+    
+    # Both questions must be 1 or 2 to be classified as "Inspired"
+    df$percentage_inspiration <- ifelse(df$inspiration_score == 2, "Inspired", "Not Inspired")
+    
+    # Update the data frame in the global environment
+    assign(df_name, df, envir = .GlobalEnv)
+    count <- count + 1
+  }
+  
+  # Return the number of modified data frames
+  message(paste("Inspiration column added to", count, "data frames"))
+}
 
+# Run the function to add inspiration columns to all appropriate data frames
+add_inspiration_to_all_dfs()
 
+```
+
+```{r}
+# Function to calculate trust percentages for all trust data frames
+calculate_inspiration_percentages <- function() {
+  # Get names of all data frames in the global environment that have percentage_trust column
+  all_objects <- ls(envir = .GlobalEnv)
+  df_names <- all_objects[sapply(all_objects, function(x) {
+    obj <- get(x)
+    is.data.frame(obj) && "percentage_inspiration" %in% names(obj)
+  })]
+  
+  # Create a list to store all summary data frames
+  inspiration_summaries <- list()
+  
+  # Loop through each data frame and calculate trust percentages
+  for (df_name in df_names) {
+    df <- get(df_name, envir = .GlobalEnv)
+    
+    # Skip empty data frames
+    if (nrow(df) == 0) {
+      next
+    }
+    
+    # Count occurrences of each trust category
+    counts <- table(df$percentage_inspiration)
+    
+    # Calculate percentages
+    total <- sum(counts)
+    percentages <- as.numeric(counts) / total * 100
+    
+    # Create a summary data frame
+    summary_df <- data.frame(
+      Category = names(counts),
+      Count = as.numeric(counts),
+      Percentage = round(percentages, 1)
+    )
+    
+    # Add an identifier column for the original dataframe
+    summary_df$Source = df_name
+    
+    # Store in our list with a new name
+    summary_name <- paste0(df_name, "_summary")
+    inspiration_summaries[[summary_name]] <- summary_df
+  }
+  
+  # Return the list of summaries
+  message(paste("Created", length(inspiration_summaries), "inspiration summary data frames"))
+  return(inspiration_summaries)
+}
+
+# Run the function and assign the resulting summaries to the global environment
+inspiration_summary_dfs <- calculate_inspiration_percentages()
+list2env(inspiration_summary_dfs, envir = .GlobalEnv)
 
