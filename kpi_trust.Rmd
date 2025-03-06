@@ -124,3 +124,104 @@ for (country in countries) {
 list2env(all_dfs, envir = .GlobalEnv)
 
 
+```
+
+```{r}
+## create function so that is answer 1 or 2 to 2 or more of questions condiered trust
+
+# Function to add trust column to all existing data frames
+add_trust_to_all_dfs <- function() {
+  # Get names of all data frames in the global environment
+  all_objects <- ls(envir = .GlobalEnv)
+  df_names <- all_objects[sapply(all_objects, function(x) {
+    obj <- get(x)
+    is.data.frame(obj) && all(c("trust1Q5", "trust2Q6", "trust3Q7") %in% names(obj))
+  })]
+  
+  # Counter for modified data frames
+  count <- 0
+  
+  # Loop through each trust data frame and add the trust column
+  for (df_name in df_names) {
+    df <- get(df_name, envir = .GlobalEnv)
+    
+    # Calculate trust score and percentage_trust column more carefully
+    df$trust_score <- rowSums(
+      data.frame(
+        trust1 = df$trust1Q5 %in% c(1, 2),
+        trust2 = df$trust2Q6 %in% c(1, 2),
+        trust3 = df$trust3Q7 %in% c(1, 2)
+      ),
+      na.rm = TRUE
+    )
+    
+    df$percentage_trust <- ifelse(df$trust_score >= 2, "TRUST", "No Trust")
+    
+    # Update the data frame in the global environment
+    assign(df_name, df, envir = .GlobalEnv)
+    count <- count + 1
+  }
+  
+  # Return the number of modified data frames
+  message(paste("Trust column added to", count, "data frames"))
+}
+
+# Run the function to add trust columns to all appropriate data frames
+add_trust_to_all_dfs()
+
+
+```
+
+```{r}
+
+# Function to calculate trust percentages for all trust data frames
+calculate_trust_percentages <- function() {
+  # Get names of all data frames in the global environment that have percentage_trust column
+  all_objects <- ls(envir = .GlobalEnv)
+  df_names <- all_objects[sapply(all_objects, function(x) {
+    obj <- get(x)
+    is.data.frame(obj) && "percentage_trust" %in% names(obj)
+  })]
+  
+  # Create a list to store all summary data frames
+  trust_summaries <- list()
+  
+  # Loop through each data frame and calculate trust percentages
+  for (df_name in df_names) {
+    df <- get(df_name, envir = .GlobalEnv)
+    
+    # Skip empty data frames
+    if (nrow(df) == 0) {
+      next
+    }
+    
+    # Count occurrences of each trust category
+    counts <- table(df$percentage_trust)
+    
+    # Calculate percentages
+    total <- sum(counts)
+    percentages <- as.numeric(counts) / total * 100
+    
+    # Create a summary data frame
+    summary_df <- data.frame(
+      Category = names(counts),
+      Count = as.numeric(counts),
+      Percentage = round(percentages, 1)
+    )
+    
+    # Add an identifier column for the original dataframe
+    summary_df$Source = df_name
+    
+    # Store in our list with a new name
+    summary_name <- paste0(df_name, "_summary")
+    trust_summaries[[summary_name]] <- summary_df
+  }
+  
+  # Return the list of summaries
+  message(paste("Created", length(trust_summaries), "trust summary data frames"))
+  return(trust_summaries)
+}
+
+# Run the function and assign the resulting summaries to the global environment
+trust_summary_dfs <- calculate_trust_percentages()
+list2env(trust_summary_dfs, envir = .GlobalEnv)
