@@ -30,9 +30,9 @@ create_brand_dfs <- function(data, country_code, audience_var = NULL) {
   
   content_groups <- list(
     all_media = NULL,  # No additional filtering
-    videos = c("youtube", "shorts"),
-    articles = "article",
-    static = c("threads", "tweet", "instagram", "facebook")
+    videos = c("Videos"),
+    articles = "Articles",
+    static = c("Social Media")
   )
   result_dfs <- list()
   

@@ -18,7 +18,7 @@ library(here)
 
 ```{r}
 
- m2_main <- read.csv(here("data", "M2data.csv"))
+ m2_main <- read.csv(here("data", "reprocessed_M2_data.csv"))
 
 ```
 
@@ -28,8 +28,7 @@ library(here)
 
 kpi_variables <- m2_main %>%
   select(respondent_id, brand, brand1Q10, brand2Q11, brand3Q12, trust, trust1Q5, trust2Q6, trust3Q7, 
-         issue, issue1Q13, issue2Q14, issue3Q15, inspiration, inspire1Q8, inspire2Q9, optimistic, gates_compare_other, content_type, market,
-         OL, Base, po_base, posai)
+         issue, issue1Q13, issue2Q14, issue3Q15, inspiration, inspire1Q8, inspire2Q9, optimistic_happy, gates_compare_other, content_type, market, OL, Base, po_base, posai, dochangemindQ2.O1, dolearnQ2.O2, dononeQ2.O5, doshareQ2.O3, dowriteQ2.O4)
 
 write.csv(kpi_variables, here("data", "kpi_var.csv"), row.names = FALSE)
 

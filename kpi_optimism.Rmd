@@ -1,13 +1,9 @@
 ---
-title: "kpi_trust"
+title: "Kpi_optimism"
 author: "Zain"
-date: "2025-03-05"
+date: "2025-03-06"
 output: html_document
 ---
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
-```
 
 ```{r}
 library(tidyverse)
@@ -16,19 +12,18 @@ library(here)
 ```
 
 ```{r}
-
  kpi <- read.csv(here("data", "kpi_var.csv"))
+
 ```
 
 ```{r}
 
-
-create_trust_dfs <- function(data, country_code, audience_var = NULL) {
+create_optimism_dfs <- function(data, country_code, audience_var = NULL) {
 
   if(is.null(audience_var)) {
-    base_name <- paste0(country_code, "_genpop_trust")  # Default to genpop if no audience specified
+    base_name <- paste0(country_code, "_genpop_optimistic")  # Default to genpop if no audience specified
   } else {
-    base_name <- paste0(country_code, "_", audience_var, "_trust")
+    base_name <- paste0(country_code, "_", audience_var, "_action")
   }
   
  
@@ -49,14 +44,14 @@ create_trust_dfs <- function(data, country_code, audience_var = NULL) {
     
      
     base_filter <- data %>%
-      select(trust1Q5, trust2Q6, trust3Q7, content_type, gates_compare_other, market) %>%
+      select(, content_type, gates_compare_other, market) %>%
       filter(market == country_code)
     
     
     if(!is.null(audience_var)) {
       # Add the audience variable to the selection
       base_filter <- data %>%
-        select(trust1Q5, trust2Q6, trust3Q7, content_type, gates_compare_other, market, !!sym(audience_var)) %>%
+        select(optimistic_happy, content_type, gates_compare_other, market, !!sym(audience_var)) %>%
         filter(market == country_code, !!sym(audience_var) == 1)
     }
     
@@ -108,19 +103,24 @@ all_dfs <- list()
 
 # create the genpop dataframes (no specific audience filtering)
 for (country in countries) {
-  country_dfs <- create_trust_dfs(kpi, country)  # No audience filter
+  country_dfs <- create_optimism_dfs(kpi, country)  # No audience filter
   all_dfs <- c(all_dfs, country_dfs)
 }
 
 #  create dataframes for each specific audience type
 for (country in countries) {
   for (audience in audience_vars) {
-    country_audience_dfs <- create_trust_dfs(kpi, country, audience)
+    country_audience_dfs <- create_optimism_dfs(kpi, country, audience)
     all_dfs <- c(all_dfs, country_audience_dfs)
   }
 }
 
 # Assign the dataframes to the global environment
 list2env(all_dfs, envir = .GlobalEnv)
+
+```
+
+
+
 
 
