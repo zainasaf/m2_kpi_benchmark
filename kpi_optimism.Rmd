@@ -44,14 +44,14 @@ create_optimism_dfs <- function(data, country_code, audience_var = NULL) {
     
      
     base_filter <- data %>%
-      select(, content_type, gates_compare_other, market) %>%
+      select(feeloptimQ3.O1, content_type, gates_compare_other, market) %>%
       filter(market == country_code)
     
     
     if(!is.null(audience_var)) {
       # Add the audience variable to the selection
       base_filter <- data %>%
-        select(optimistic_happy, content_type, gates_compare_other, market, !!sym(audience_var)) %>%
+        select(feeloptimQ3.O1, content_type, gates_compare_other, market, !!sym(audience_var)) %>%
         filter(market == country_code, !!sym(audience_var) == 1)
     }
     
@@ -130,7 +130,7 @@ add_optimism_to_all_dfs <- function() {
   all_objects <- ls(envir = .GlobalEnv)
   df_names <- all_objects[sapply(all_objects, function(x) {
     obj <- get(x)
-    is.data.frame(obj) && all(c("optimistic_happy") %in% names(obj))
+    is.data.frame(obj) && all(c("feeloptimQ3.O1") %in% names(obj))
   })]
   
   count <- 0
@@ -141,10 +141,10 @@ add_optimism_to_all_dfs <- function() {
     
     # We don't need the rowSums part since we're just checking one variable
     # The optimism_score calculation can be simplified or removed
-    df$optimism_score <- df$optimistic_happy
+    df$optimism_score <- df$feeloptimQ3.O1
     
     # Set the percentage_optimistic column based on the optimistic_happy value
-    df$percentage_optimistic <- ifelse(df$optimistic_happy == 1, "Optimistic", "Not Optimistic")
+    df$percentage_optimistic <- ifelse(df$feeloptimQ3.O1 == 1, "Optimistic", "Not Optimistic")
     
     # Update the data frame in the global environment
     assign(df_name, df, envir = .GlobalEnv)
