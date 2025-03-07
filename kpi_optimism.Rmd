@@ -23,7 +23,7 @@ create_optimism_dfs <- function(data, country_code, audience_var = NULL) {
   if(is.null(audience_var)) {
     base_name <- paste0(country_code, "_genpop_optimistic")  # Default to genpop if no audience specified
   } else {
-    base_name <- paste0(country_code, "_", audience_var, "_action")
+    base_name <- paste0(country_code, "_", audience_var, "_optimistic")
   }
   
  
@@ -120,7 +120,96 @@ list2env(all_dfs, envir = .GlobalEnv)
 
 ```
 
+```{r}
 
+## ask about coding for optismistic happy 
 
+## create function so that is answer 1 or 2 to 2 or more of questions condiered trust
 
+add_optimism_to_all_dfs <- function() {
+  all_objects <- ls(envir = .GlobalEnv)
+  df_names <- all_objects[sapply(all_objects, function(x) {
+    obj <- get(x)
+    is.data.frame(obj) && all(c("optimistic_happy") %in% names(obj))
+  })]
+  
+  count <- 0
+  
+  # Loop through each data frame and add the optimism column
+  for (df_name in df_names) {
+    df <- get(df_name, envir = .GlobalEnv)
+    
+    # We don't need the rowSums part since we're just checking one variable
+    # The optimism_score calculation can be simplified or removed
+    df$optimism_score <- df$optimistic_happy
+    
+    # Set the percentage_optimistic column based on the optimistic_happy value
+    df$percentage_optimistic <- ifelse(df$optimistic_happy == 1, "Optimistic", "Not Optimistic")
+    
+    # Update the data frame in the global environment
+    assign(df_name, df, envir = .GlobalEnv)
+    count <- count + 1
+  }
+  
+  # Return the number of modified data frames
+  message(paste("Optimism column added to", count, "data frames"))
+}
+# Run the function to add optimism columns to all appropriate data frames
+add_optimism_to_all_dfs()
 
+```
+
+```{r}
+# Function to calculate trust percentages for all trust data frames
+calculate_optimistic_percentages <- function() {
+  # Get names of all data frames in the global environment that have percentage_trust column
+  all_objects <- ls(envir = .GlobalEnv)
+  df_names <- all_objects[sapply(all_objects, function(x) {
+    obj <- get(x)
+    is.data.frame(obj) && "percentage_optimistic" %in% names(obj)
+  })]
+  
+  # Create a list to store all summary data frames
+  optimistic_summaries <- list()
+  
+  # Loop through each data frame and calculate trust percentages
+  for (df_name in df_names) {
+    df <- get(df_name, envir = .GlobalEnv)
+    
+    # Skip empty data frames
+    if (nrow(df) == 0) {
+      next
+    }
+    
+    # Count occurrences of each trust category
+    counts <- table(df$percentage_optimistic)
+    
+    # Calculate percentages
+    total <- sum(counts)
+    percentages <- as.numeric(counts) / total * 100
+    
+    # Create a summary data frame
+    summary_df <- data.frame(
+      Category = names(counts),
+      Count = as.numeric(counts),
+      Percentage = round(percentages, 1)
+    )
+    
+    # Add an identifier column for the original dataframe
+    summary_df$Source = df_name
+    
+    # Store in our list with a new name
+    summary_name <- paste0(df_name, "_summary")
+    optimistic_summaries[[summary_name]] <- summary_df
+  }
+  
+  # Return the list of summaries
+  message(paste("Created", length(optimistic_summaries), "optimisitc summary data frames"))
+  return(optimistic_summaries)
+}
+
+# Run the function and assign the resulting summaries to the global environment
+optimistic_summary_dfs <- calculate_optimistic_percentages()
+list2env(optimistic_summary_dfs, envir = .GlobalEnv)
+
+```
