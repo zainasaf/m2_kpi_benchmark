@@ -129,23 +129,22 @@ list2env(all_dfs, envir = .GlobalEnv)
 ```{r}
 ## create function so that is answer 1 or 2 to 2 or more of questions condiered trust
 
-# Function to add trust column to all existing data frames
+
 add_trust_to_all_dfs <- function() {
-  # Get names of all data frames in the global environment
+
   all_objects <- ls(envir = .GlobalEnv)
   df_names <- all_objects[sapply(all_objects, function(x) {
     obj <- get(x)
     is.data.frame(obj) && all(c("trust1Q5", "trust2Q6", "trust3Q7") %in% names(obj))
   })]
   
-  # Counter for modified data frames
   count <- 0
   
   # Loop through each trust data frame and add the trust column
   for (df_name in df_names) {
     df <- get(df_name, envir = .GlobalEnv)
     
-    # Calculate trust score and percentage_trust column more carefully
+  
     df$trust_score <- rowSums(
       data.frame(
         trust1 = df$trust1Q5 %in% c(1, 2),
