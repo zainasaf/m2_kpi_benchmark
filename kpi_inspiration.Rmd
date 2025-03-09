@@ -162,8 +162,9 @@ add_inspiration_to_all_dfs()
 
 ```{r}
 # Function to calculate trust percentages for all trust data frames
+
 calculate_inspiration_percentages <- function() {
-  # Get names of all data frames in the global environment that have percentage_trust column
+  # Get names of all data frames in the global environment that have percentage_inspiration column
   all_objects <- ls(envir = .GlobalEnv)
   df_names <- all_objects[sapply(all_objects, function(x) {
     obj <- get(x)
@@ -173,7 +174,7 @@ calculate_inspiration_percentages <- function() {
   # Create a list to store all summary data frames
   inspiration_summaries <- list()
   
-  # Loop through each data frame and calculate trust percentages
+  # Loop through each data frame and calculate inspiration percentages
   for (df_name in df_names) {
     df <- get(df_name, envir = .GlobalEnv)
     
@@ -182,18 +183,16 @@ calculate_inspiration_percentages <- function() {
       next
     }
     
-    # Count occurrences of each trust category
-    counts <- table(df$percentage_inspiration)
-    
-    # Calculate percentages
-    total <- sum(counts)
-    percentages <- as.numeric(counts) / total * 100
-    
-    # Create a summary data frame
+    # Calculate percentages for inspired only
+    total <- nrow(df)
+    positive_count <- sum(df$percentage_inspiration == "Inspired", na.rm = TRUE)
+    positive_percentage <- positive_count / total * 100
+   
+    # Create a summary data frame with positive category
     summary_df <- data.frame(
-      Category = names(counts),
-      Count = as.numeric(counts),
-      Percentage = round(percentages, 1)
+      Category = "Inspired",
+      Count = positive_count,
+      Percentage = round(positive_percentage, 1)
     )
     
     # Add an identifier column for the original dataframe
@@ -209,7 +208,7 @@ calculate_inspiration_percentages <- function() {
   return(inspiration_summaries)
 }
 
+
 # Run the function and assign the resulting summaries to the global environment
 inspiration_summary_dfs <- calculate_inspiration_percentages()
 list2env(inspiration_summary_dfs, envir = .GlobalEnv)
-

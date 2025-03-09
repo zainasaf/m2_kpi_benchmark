@@ -125,6 +125,212 @@ list2env(all_dfs, envir = .GlobalEnv)
 
 ```
 
+```{r}
+add_action_to_all_dfs <- function() {
+  all_objects <- ls(envir = .GlobalEnv)
+  
+  # Filter for dataframes containing the required action columns
+  df_names <- all_objects[sapply(all_objects, function(x) {
+    obj <- get(x)
+    is.data.frame(obj) && 
+      "dochangemindQ2.O1" %in% names(obj) && 
+      "dolearnQ2.O2" %in% names(obj) && 
+      "dononeQ2.O5" %in% names(obj) && 
+      "doshareQ2.O3" %in% names(obj) && 
+      "dowriteQ2.O4" %in% names(obj)
+  })]
+  
+  # Debug: Print number of matching dataframes
+  message(paste("Found", length(df_names), "dataframes with required columns"))
+  
+  # If no dataframes match, return early
+  if(length(df_names) == 0) {
+    message("No matching dataframes found.")
+    return(NULL)
+  }
+  
+  # Debug: Print the first matching dataframe name
+  if(length(df_names) > 0) {
+    message(paste("First matching dataframe:", df_names[1]))
+    
+    # Check unique values in each column for the first dataframe
+    df_test <- get(df_names[1])
+    message("Unique values in dochangemindQ2.O1: ", paste(unique(df_test$dochangemindQ2.O1), collapse=", "))
+    message("Unique values in dolearnQ2.O2: ", paste(unique(df_test$dolearnQ2.O2), collapse=", "))
+    message("Unique values in dononeQ2.O5: ", paste(unique(df_test$dononeQ2.O5), collapse=", "))
+    message("Unique values in doshareQ2.O3: ", paste(unique(df_test$doshareQ2.O3), collapse=", "))
+    message("Unique values in dowriteQ2.O4: ", paste(unique(df_test$dowriteQ2.O4), collapse=", "))
+  }
+  
+  count <- 0
+  
+  # Loop through each dataframe and add action column
+  for (df_name in df_names) {
+    df <- get(df_name, envir = .GlobalEnv)
+    
+    # Debug: Check how many rows in each dataframe
+    message(paste("Processing", df_name, "with", nrow(df), "rows"))
+    
+    # Try a different approach with direct column access
+    action1_values <- as.numeric(df$dochangemindQ2.O1)
+    action2_values <- as.numeric(df$dolearnQ2.O2)
+    action3_values <- as.numeric(df$dononeQ2.O5)
+    action4_values <- as.numeric(df$doshareQ2.O3)
+    action5_values <- as.numeric(df$dowriteQ2.O4)
+    
+    # Create individual logical vectors
+    action1 <- action1_values %in% c(1, 2)
+    action2 <- action2_values %in% c(1, 2)
+    action3 <- action3_values %in% c(1, 2)
+    action4 <- action4_values %in% c(1, 2)
+    action5 <- action5_values %in% c(1, 2)
+    
+    # Debug: Check how many TRUE values in each action
+    message(paste("action1 TRUE count:", sum(action1, na.rm=TRUE)))
+    message(paste("action2 TRUE count:", sum(action2, na.rm=TRUE)))
+    message(paste("action3 TRUE count:", sum(action3, na.rm=TRUE)))
+    message(paste("action4 TRUE count:", sum(action4, na.rm=TRUE)))
+    message(paste("action5 TRUE count:", sum(action5, na.rm=TRUE)))
+    
+    # Calculate action score by summing logical vectors directly
+    df$action_score <- rowSums(
+      cbind(action1, action2, action3, action4, action5),
+      na.rm = TRUE
+    )
+    
+    # Debug: Check distribution of action_score
+    action_score_table <- table(df$action_score)
+    message("action_score distribution:")
+    print(action_score_table)
+    
+    # Create percentage_action column
+    df$percentage_action <- ifelse(df$action_score >= 3, "Take Action", "No Action")
+    
+    # Update the data frame in the global environment
+    assign(df_name, df, envir = .GlobalEnv)
+    count <- count + 1
+  }
+  
+  # Return the number of modified data frames
+  message(paste("Action column added to", count, "data frames"))
+}
+
+
+```
+
+
+```{r}
+
+add_action_to_all_dfs <- function() {
+  all_objects <- ls(envir = .GlobalEnv)
+  
+  # Filter for dataframes containing the required action columns
+  df_names <- all_objects[sapply(all_objects, function(x) {
+    obj <- get(x)
+    is.data.frame(obj) && 
+      "dochangemindQ2.O1" %in% names(obj) && 
+      "dolearnQ2.O2" %in% names(obj) && 
+      "dononeQ2.O5" %in% names(obj) && 
+      "doshareQ2.O3" %in% names(obj) && 
+      "dowriteQ2.O4" %in% names(obj)
+  })]
+  
+  message(paste("Found", length(df_names), "matching dataframes"))
+  
+  count <- 0
+  
+  # Loop through each dataframe and add action column
+  for (df_name in df_names) {
+    # Get a copy of the dataframe
+    df <- get(df_name, envir = .GlobalEnv)
+    
+    # Create temporary columns without periods
+    df$dochangemind <- df$dochangemindQ2.O1
+    df$dolearn <- df$dolearnQ2.O2
+    df$donone <- df$dononeQ2.O5
+    df$doshare <- df$doshareQ2.O3
+    df$dowrite <- df$dowriteQ2.O4
+    
+    # Calculate action score using the temporary columns
+    df$action_score <- rowSums(
+      data.frame(
+        action1 = df$dochangemind %in% c(1, 2),
+        action2 = df$dolearn %in% c(1, 2),
+        action3 = df$donone %in% c(1, 2), 
+        action4 = df$doshare %in% c(1, 2),
+        action5 = df$dowrite %in% c(1, 2)
+      ),
+      na.rm = TRUE
+    )
+    
+    # Create percentage_action column
+    df$percentage_action <- ifelse(df$action_score >= 3, "Take Action", "No Action")
+    
+    # Remove temporary columns
+    df$dochangemind <- NULL
+    df$dolearn <- NULL
+    df$donone <- NULL
+    df$doshare <- NULL
+    df$dowrite <- NULL
+    
+    # Update the dataframe in the global environment
+    assign(df_name, df, envir = .GlobalEnv)
+    count <- count + 1
+  }
+  
+  message(paste("Action column added to", count, "data frames"))
+}
+```
+
+```{r}
+calculate_action_percentages <- function() {
+  # Get names of all data frames in the global environment that have percentage_action column
+  all_objects <- ls(envir = .GlobalEnv)
+  df_names <- all_objects[sapply(all_objects, function(x) {
+    obj <- get(x)
+    is.data.frame(obj) && "percentage_action" %in% names(obj)
+  })]
+  
+  # Create a list to store all summary data frames
+  action_summaries <- list()
+  
+  # Loop through each data frame and calculate action percentages
+  for (df_name in df_names) {
+    df <- get(df_name, envir = .GlobalEnv)
+    
+    # Skip empty data frames
+    if (nrow(df) == 0) {
+      next
+    }
+    
+    # Calculate percentages for "Take Action" category only
+    total <- nrow(df) 
+    positive_count <- sum(df$percentage_action == "Take Action", na.rm = TRUE)
+    positive_percentage <- positive_count / total * 100
+   
+    # Create a summary data frame with only the positive category
+    summary_df <- data.frame(
+      Category = "Take Action",
+      Count = positive_count,
+      Percentage = round(positive_percentage, 1)
+    )
+    
+    # Add an identifier column for the original dataframe
+    summary_df$Source = df_name
+    
+    # Store in our list with a new name
+    summary_name <- paste0(df_name, "_summary")
+    action_summaries[[summary_name]] <- summary_df
+  }
+  
+  # Return the list of summaries
+  message(paste("Created", length(action_summaries), "action summary data frames"))
+  return(action_summaries)
+}
+
+```
+
+
 
 
 

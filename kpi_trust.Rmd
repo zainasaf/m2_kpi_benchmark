@@ -195,18 +195,33 @@ calculate_trust_percentages <- function() {
     }
     
     # Count occurrences of each trust category
-    counts <- table(df$percentage_trust)
+   # counts <- table(df$percentage_trust)
     
     # Calculate percentages
-    total <- sum(counts)
-    percentages <- as.numeric(counts) / total * 100
+    #total <- sum(counts)
+  #  percentages <- as.numeric(counts) / total * 100
+    
+    
+     total <- nrow(df)
+    positive_count <- sum(df$percentage_trust == "TRUST", na.rm = TRUE)
+    positive_percentage <- positive_count / total * 100
+   
+     summary_df <- data.frame(
+      Category = "TRUST",
+      Count = positive_count,
+      Percentage = round(positive_percentage, 1)
+    )
+    
+    # Add an identifier column for the original dataframe
+    summary_df$Source = df_name
+ 
     
     # Create a summary data frame
-    summary_df <- data.frame(
-      Category = names(counts),
-      Count = as.numeric(counts),
-      Percentage = round(percentages, 1)
-    )
+  #  summary_df <- data.frame(
+  #    Category = names(counts),
+  #    Count = as.numeric(counts),
+  #    Percentage = round(percentages, 1)
+  #  )
     
     # Add an identifier column for the original dataframe
     summary_df$Source = df_name
@@ -224,3 +239,9 @@ calculate_trust_percentages <- function() {
 # Run the function and assign the resulting summaries to the global environment
 trust_summary_dfs <- calculate_trust_percentages()
 list2env(trust_summary_dfs, envir = .GlobalEnv)
+
+write.csv(uk_posai_trust_gates_content_static_summary, here("data", "uk_posai_trust_gates_content_static_summary.csv"), row.names = FALSE)
+
+
+
+```

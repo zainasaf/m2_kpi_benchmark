@@ -160,6 +160,8 @@ add_optimism_to_all_dfs()
 ```
 
 ```{r}
+
+
 # Function to calculate trust percentages for all trust data frames
 calculate_optimistic_percentages <- function() {
   # Get names of all data frames in the global environment that have percentage_trust column
@@ -182,29 +184,44 @@ calculate_optimistic_percentages <- function() {
     }
     
     # Count occurrences of each trust category
-    counts <- table(df$percentage_optimistic)
+   
+   # counts <- table(df$percentage_optimistic)
     
     # Calculate percentages
-    total <- sum(counts)
-    percentages <- as.numeric(counts) / total * 100
-    
-    # Create a summary data frame
-    summary_df <- data.frame(
-      Category = names(counts),
-      Count = as.numeric(counts),
-      Percentage = round(percentages, 1)
+  #  total <- sum(counts)
+   # percentages <- as.numeric(counts) / total * 100  total <- nrow(df)
+   
+      total <- nrow(df) 
+      positive_count <- sum(df$percentage_optimistic == "Optimistic", na.rm = TRUE)
+    positive_percentage <- positive_count / total * 100
+   
+     summary_df <- data.frame(
+      Category = "Optimistic",
+      Count = positive_count,
+      Percentage = round(positive_percentage, 1)
     )
     
     # Add an identifier column for the original dataframe
     summary_df$Source = df_name
     
-    # Store in our list with a new name
+    
+    
+    
+    # Create a summary data frame
+   # summary_df <- data.frame(
+    #  Category = names(counts),
+    #  Count = as.numeric(counts),
+    #  Percentage = round(percentages, 1)
+    # )
+    
+    
+     # Store in our list with a new name
     summary_name <- paste0(df_name, "_summary")
     optimistic_summaries[[summary_name]] <- summary_df
   }
   
   # Return the list of summaries
-  message(paste("Created", length(optimistic_summaries), "optimisitc summary data frames"))
+  message(paste("Created", length(optimistic_summaries), "optimistic summary data frames"))
   return(optimistic_summaries)
 }
 
@@ -213,3 +230,5 @@ optimistic_summary_dfs <- calculate_optimistic_percentages()
 list2env(optimistic_summary_dfs, envir = .GlobalEnv)
 
 ```
+
+    

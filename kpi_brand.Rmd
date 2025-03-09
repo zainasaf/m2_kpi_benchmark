@@ -184,21 +184,36 @@ calculate_brand_percentages <- function() {
     }
     
     # Count occurrences of each trust category
-    counts <- table(df$percentage_brand)
+   # counts <- table(df$percentage_brand)
     
     # Calculate percentages
-    total <- sum(counts)
-    percentages <- as.numeric(counts) / total * 100
+   # total <- sum(counts)
+  #  percentages <- as.numeric(counts) / total * 100
     
-    # Create a summary data frame
-    summary_df <- data.frame(
-      Category = names(counts),
-      Count = as.numeric(counts),
-      Percentage = round(percentages, 1)
+    
+    total <- nrow(df)
+    positive_count <- sum(df$percentage_brand == "Positive", na.rm = TRUE)
+    positive_percentage <- positive_count / total * 100
+   
+     summary_df <- data.frame(
+      Category = "Positive",
+      Count = positive_count,
+      Percentage = round(positive_percentage, 1)
     )
     
     # Add an identifier column for the original dataframe
     summary_df$Source = df_name
+    
+    
+    
+    # Create a summary data frame
+   # summary_df <- data.frame(
+    #  Category = names(counts),
+     # Count = as.numeric(counts),
+    #  Percentage = round(percentages, 1)
+  #  )
+    
+
     
     # Store in our list with a new name
     summary_name <- paste0(df_name, "_summary")

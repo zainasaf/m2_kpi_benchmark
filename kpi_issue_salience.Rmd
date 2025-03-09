@@ -168,10 +168,8 @@ add_issue_to_all_dfs()
 ```
 
 ```{r}
-
-# Function to calculate trust percentages for all trust data frames
 calculate_issue_percentages <- function() {
-  # Get names of all data frames in the global environment that have percentage_trust column
+  # Get names of all data frames in the global environment that have percentage_issue column
   all_objects <- ls(envir = .GlobalEnv)
   df_names <- all_objects[sapply(all_objects, function(x) {
     obj <- get(x)
@@ -179,9 +177,9 @@ calculate_issue_percentages <- function() {
   })]
   
   # Create a list to store all summary data frames
-  trust_summaries <- list()
+  issue_summaries <- list()
   
-  # Loop through each data frame and calculate trust percentages
+  # Loop through each data frame and calculate salient percentages
   for (df_name in df_names) {
     df <- get(df_name, envir = .GlobalEnv)
     
@@ -190,18 +188,16 @@ calculate_issue_percentages <- function() {
       next
     }
     
-    # Count occurrences of each trust category
-    counts <- table(df$percentage_issue)
-    
-    # Calculate percentages
-    total <- sum(counts)
-    percentages <- as.numeric(counts) / total * 100
+    # Calculate percentages for salient issues only
+    total <- nrow(df)
+    positive_count <- sum(df$percentage_issue == "Salient", na.rm = TRUE)
+    positive_percentage <- positive_count / total * 100
     
     # Create a summary data frame
     summary_df <- data.frame(
-      Category = names(counts),
-      Count = as.numeric(counts),
-      Percentage = round(percentages, 1)
+      Category = "Salient",
+      Count = positive_count,
+      Percentage = round(positive_percentage, 1)
     )
     
     # Add an identifier column for the original dataframe
@@ -209,17 +205,62 @@ calculate_issue_percentages <- function() {
     
     # Store in our list with a new name
     summary_name <- paste0(df_name, "_summary")
-    trust_summaries[[summary_name]] <- summary_df
+    issue_summaries[[summary_name]] <- summary_df
   }
   
   # Return the list of summaries
-  message(paste("Created", length(trust_summaries), "issue summary data frames"))
-  return(trust_summaries)
+  message(paste("Created", length(issue_summaries), "issue summary data frames"))
+  return(issue_summaries)
+}
+
+calculate_issue_percentages <- function() {
+  # Get names of all data frames in the global environment that have percentage_issue column
+  all_objects <- ls(envir = .GlobalEnv)
+  df_names <- all_objects[sapply(all_objects, function(x) {
+    obj <- get(x)
+    is.data.frame(obj) && "percentage_issue" %in% names(obj)
+  })]
+  
+  # Create a list to store all summary data frames
+  issue_summaries <- list()
+  
+  # Loop through each data frame and calculate salient percentages
+  for (df_name in df_names) {
+    df <- get(df_name, envir = .GlobalEnv)
+    
+    # Skip empty data frames
+    if (nrow(df) == 0) {
+      next
+    }
+    
+    # Calculate percentages for salient issues only
+    total <- nrow(df)
+    positive_count <- sum(df$percentage_issue == "Salient", na.rm = TRUE)
+    positive_percentage <- positive_count / total * 100
+    
+    # Create a summary data frame
+    summary_df <- data.frame(
+      Category = "Salient",
+      Count = positive_count,
+      Percentage = round(positive_percentage, 1)
+    )
+    
+    # Add an identifier column for the original dataframe
+    summary_df$Source = df_name
+    
+    # Store in our list with a new name
+    summary_name <- paste0(df_name, "_summary")
+    issue_summaries[[summary_name]] <- summary_df
+  }
+  
+  # Return the list of summaries
+  message(paste("Created", length(issue_summaries), "issue summary data frames"))
+  return(issue_summaries)
 }
 
 # Run the function and assign the resulting summaries to the global environment
-trust_summary_dfs <- calculate_issue_percentages()
-list2env(trust_summary_dfs, envir = .GlobalEnv)
+issue_summary_dfs <- calculate_issue_percentages()
+list2env(issue_summary_dfs, envir = .GlobalEnv)
 
 ```
 
