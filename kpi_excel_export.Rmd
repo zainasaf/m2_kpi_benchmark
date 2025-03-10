@@ -68,7 +68,7 @@ save_only_summary_dfs <- function(kpi_name, output_path = "summary_data") {
 
 # Example usage:
 # To save all summary data frames for the issue KPI:
-save_only_summary_dfs("brand")
+save_only_summary_dfs("issue")
 
 # To save all summary data frames for the trust KPI:
 # save_only_summary_dfs("trust")
@@ -81,12 +81,8 @@ save_only_summary_dfs("brand")
 ```{r}
 
 load("summary_data/kpi_issue.RData")
-load("summary_data/kpi_trust.RData")
-load("summary_data/kpi_inspiration.RData")
-load("summary_data/kpi_brand.RData")
-load("sumary_data/kpi_optimism.RData")
 
-```
+
 
 
 
