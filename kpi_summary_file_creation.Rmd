@@ -1,0 +1,421 @@
+---
+title: "excel_export"
+author: "Zain"
+date: "2025-03-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r}
+
+
+install.packages(c("tidyverse", "openxlsx"))
+
+
+```
+
+```{r}
+# Function to save only data frames ending with "_summary"
+save_only_summary_dfs <- function(kpi_name, output_path = "summary_data") {
+  # Ensure output directory exists
+  dir.create(output_path, showWarnings = FALSE)
+  
+  # Find all objects in the global environment
+  all_objects <- ls(envir = .GlobalEnv)
+  
+  # Find objects that end with "_summary" 
+  summary_objects <- all_objects[grepl("_summary$", all_objects)]
+  
+  # Filter for objects related to the specified KPI (if kpi_name is not NULL)
+  if (!is.null(kpi_name) && kpi_name != "") {
+    kpi_summary_objects <- summary_objects[grepl(kpi_name, summary_objects, ignore.case = TRUE)]
+  } else {
+    kpi_summary_objects <- summary_objects
+  }
+  
+  # Further filter to ensure they are data frames
+  kpi_summary_dfs <- kpi_summary_objects[sapply(kpi_summary_objects, function(x) {
+    is.data.frame(get(x, envir = .GlobalEnv))
+  })]
+  
+  # Check if we found any matching data frames
+  if (length(kpi_summary_dfs) > 0) {
+    # Construct filename
+    if (!is.null(kpi_name) && kpi_name != "") {
+      filename <- file.path(output_path, paste0("kpi_", kpi_name, ".RData"))
+    } else {
+      filename <- file.path(output_path, "all_summary_dfs.RData")
+    }
+    
+    # Save the data frames
+    save(list = kpi_summary_dfs, file = filename)
+    
+    cat("Saved", length(kpi_summary_dfs), "summary data frames to", filename, "\n")
+    cat("Sample of saved data frames:\n")
+    print(head(kpi_summary_dfs, 10))
+    
+    return(TRUE)
+  } else {
+    cat("No summary data frames found", 
+        if(!is.null(kpi_name) && kpi_name != "") paste("for KPI:", kpi_name) else "", 
+        "\n")
+    return(FALSE)
+  }
+}
+
+# Example usage:
+# To save all summary data frames for the issue KPI:
+save_only_summary_dfs("brand")
+
+# To save all summary data frames for the trust KPI:
+# save_only_summary_dfs("trust")
+
+# To save ALL summary data frames (across all KPIs):
+# save_only_summary_dfs("")
+
+```
+
+```{r}
+
+load("summary_data/kpi_issue.RData")
+load("summary_data/kpi_trust.RData")
+load("summary_data/kpi_inspiration.RData")
+load("summary_data/kpi_brand.RData")
+
+
+
+
+
+
+
+
+
+
+
+
+```{r} 
+
+# First, check what's actually in your environment
+all_objects <- ls(envir = .GlobalEnv)
+
+# Print the total number of objects
+cat("Total number of objects in environment:", length(all_objects), "\n")
+
+# Look for data frames
+df_objects <- all_objects[sapply(all_objects, function(x) is.data.frame(get(x)))]
+cat("Total number of data frames:", length(df_objects), "\n")
+
+# Print a sample of data frame names
+if (length(df_objects) > 0) {
+  cat("Sample of data frame names:\n")
+  print(head(df_objects, 10))
+} else {
+  cat("No data frames found in environment\n")
+}
+
+# Look for objects with "summary" in their name
+summary_objects <- all_objects[grepl("summary", all_objects, ignore.case = TRUE)]
+cat("\nObjects with 'summary' in name:", length(summary_objects), "\n")
+if (length(summary_objects) > 0) {
+  cat("Sample of 'summary' objects:\n")
+  print(head(summary_objects, 10))
+}
+
+# Look for objects with "issue" in their name
+issue_objects <- all_objects[grepl("issue", all_objects, ignore.case = TRUE)]
+cat("\nObjects with 'issue' in name:", length(issue_objects), "\n")
+if (length(issue_objects) > 0) {
+  cat("Sample of 'issue' objects:\n")
+  print(head(issue_objects, 10))
+}
+
+# Try other possible patterns - "trust" or "kpi"
+trust_objects <- all_objects[grepl("trust", all_objects, ignore.case = TRUE)]
+cat("\nObjects with 'trust' in name:", length(trust_objects), "\n")
+if (length(trust_objects) > 0) {
+  cat("Sample of 'trust' objects:\n")
+  print(head(trust_objects, 10))
+}
+
+kpi_objects <- all_objects[grepl("kpi", all_objects, ignore.case = TRUE)]
+cat("\nObjects with 'kpi' in name:", length(kpi_objects), "\n")
+if (length(kpi_objects) > 0) {
+  cat("Sample of 'kpi' objects:\n")
+  print(head(kpi_objects, 10))
+}
+
+# Create the directory for saving files
+dir.create("summary_data", showWarnings = FALSE)
+cat("\nCreated directory:", file.path(getwd(), "summary_data"), "\n")
+
+
+```
+
+```{r}
+# Ensure the summary_data directory exists
+dir.create("summary_data", showWarnings = FALSE)
+
+# Find all objects with both "issue" and "summary" in their names
+all_objects <- ls(envir = .GlobalEnv)
+issue_summary_objects <- all_objects[grepl("issue", all_objects, ignore.case = TRUE) & 
+                                    grepl("summary", all_objects, ignore.case = TRUE)]
+
+# Check how many we found
+cat("Found", length(issue_summary_objects), "objects with both 'issue' and 'summary' in their names\n")
+
+# If we found very few or none, let's check for a different pattern
+if (length(issue_summary_objects) < 10) {
+  # Try to find objects ending with "_summary" that might be related to the issue KPI
+  summary_objects <- all_objects[grepl("_summary$", all_objects)]
+  cat("Found", length(summary_objects), "objects ending with '_summary'\n")
+  
+  # Print some examples
+  if (length(summary_objects) > 0) {
+    cat("Examples of objects ending with '_summary':\n")
+    print(head(summary_objects, 10))
+  }
+  
+  # Ask user to confirm which pattern to use
+  cat("\nBased on the object names, we need to determine which summary objects to save.\n")
+  cat("Please examine the names and decide how to identify your issue KPI summary data frames.\n")
+}
+
+# Filter for data frames only
+issue_summary_dfs <- issue_summary_objects[sapply(issue_summary_objects, function(x) {
+  is.data.frame(get(x, envir = .GlobalEnv))
+})]
+
+cat("Found", length(issue_summary_dfs), "data frames with both 'issue' and 'summary' in their names\n")
+
+# If we have data frames to save, save them
+if (length(issue_summary_dfs) > 0) {
+  # Print example names
+  cat("Examples of data frames that will be saved:\n")
+  print(head(issue_summary_dfs, 10))
+  
+  # Save to RData file
+  save(list = issue_summary_dfs, file = "summary_data/kpi_issue.RData")
+  cat("Saved", length(issue_summary_dfs), "data frames to summary_data/kpi_issue.RData\n")
+} else {
+  cat("No matching data frames found to save.\n")
+  
+  # Let's look at some of the objects to determine what to save
+  # Check a few of the summary objects to see if they're data frames
+  if (exists("summary_objects") && length(summary_objects) > 0) {
+    # Get 5 random summary objects
+    samples <- sample(summary_objects, min(5, length(summary_objects)))
+    
+    cat("\nChecking sample summary objects:\n")
+    for (obj_name in samples) {
+      obj <- get(obj_name, envir = .GlobalEnv)
+      cat(obj_name, "- Class:", class(obj), "\n")
+      if (is.data.frame(obj)) {
+        cat("  Is a data frame with", nrow(obj), "rows and", ncol(obj), "columns\n")
+        cat("  Column names:", paste(names(obj), collapse=", "), "\n\n")
+      } else {
+        cat("  Not a data frame\n\n")
+      }
+    }
+  }
+}
+
+# Alternative approach: Create a function to manually save a set of data frames
+save_selected_dfs <- function(pattern, output_file) {
+  # Find data frames matching the pattern
+  all_objects <- ls(envir = .GlobalEnv)
+  matching_objects <- all_objects[grepl(pattern, all_objects, ignore.case = TRUE)]
+  
+  matching_dfs <- matching_objects[sapply(matching_objects, function(x) {
+    is.data.frame(get(x, envir = .GlobalEnv))
+  })]
+  
+  # Save if any found
+  if (length(matching_dfs) > 0) {
+    save(list = matching_dfs, file = output_file)
+    cat("Saved", length(matching_dfs), "data frames to", output_file, "\n")
+    return(TRUE)
+  } else {
+    cat("No matching data frames found for pattern:", pattern, "\n")
+    return(FALSE)
+  }
+}
+
+# Example usage of the function (commented out)
+# To save all data frames with "issue" in their name:
+# save_selected_dfs("issue", "summary_data/kpi_issue.RData")
+
+
+load("summary_data/kpi_issue.RData")
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+# Create the directory if it doesn't exist
+#dir.create("summary_data", showWarnings = FALSE)
+
+# Find all data frames in the global environment that contain both "issue" and "summary"
+all_objects <- ls(envir = .GlobalEnv)
+issue_summary_df_names <- all_objects[grepl("issue", all_objects, ignore.case = TRUE) & 
+                                     grepl("summary", all_objects, ignore.case = TRUE)]
+
+# Print how many we found
+cat("Found", length(issue_summary_df_names), "issue summary data frames\n")
+
+# Display the first few data frame names (if any found)
+if (length(issue_summary_df_names) > 0) {
+  cat("Example data frame names:\n")
+  print(head(issue_summary_df_names, 5))
+} else {
+  cat("No issue summary data frames found\n")
+}
+
+# Save these data frames to an RData file in the summary_data folder
+if (length(issue_summary_df_names) > 0) {
+  # First approach: save all data frames in one file
+  save(list = issue_summary_df_names, 
+       file = "summary_data/kpi_issue.RData")
+  
+  cat("Saved", length(issue_summary_df_names), 
+      "issue summary data frames to summary_data/kpi_issue.RData\n")
+}
+
+# Alternatively, if you want to verify which data frames are being saved:
+# Uncomment this section to see more details about what's being saved
+#
+# for (name in issue_summary_df_names) {
+#   df <- get(name)
+#   cat("Data frame:", name, "- Dimensions:", nrow(df), "rows x", ncol(df), "columns\n")
+# }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+kpi_files <- c(
+  "path/to/kpi_trust.RData",
+  "path/to/kpi_salience.RData",
+  "path/to/kpi_action.RData",
+  "path/to/kpi_optimism.RData", 
+  "path/to/kpi_brand.RData",
+  "path/to/kpi_inspiration.RData"
+)
+
+library(tidyverse)
+
+# Function to extract all summary data frames from a KPI file
+extract_summary_frames <- function(kpi_file) {
+  # Create a new environment to avoid cluttering global environment
+  temp_env <- new.env()
+  
+  # Load the file into the temporary environment
+  load(kpi_file, envir = temp_env)
+  
+  # Extract KPI name from the file name
+  kpi_name <- gsub("kpi_", "", gsub(".RData", "", basename(kpi_file)))
+  
+  # Get all summary data frames in the environment
+  all_objects <- ls(envir = temp_env)
+  summary_df_names <- all_objects[grepl("_summary$", all_objects)]
+  
+  # Create a list to store all data frames
+  summary_dfs <- list()
+  
+  # Process each summary data frame
+  for (df_name in summary_df_names) {
+    # Get the data frame
+    df <- get(df_name, envir = temp_env)
+    
+    # Add KPI column
+    df$KPI <- kpi_name
+    
+    # Add source name
+    df$SourceName <- df_name
+    
+    # Add to list
+    summary_dfs[[df_name]] <- df
+  }
+  
+  # Combine all data frames from this file
+  if (length(summary_dfs) > 0) {
+    combined_df <- bind_rows(summary_dfs)
+    return(combined_df)
+  } else {
+    return(NULL)
+  }
+}
+
+# List of KPI file paths - update these to your actual file paths
+kpi_files <- c(
+  "path/to/kpi_trust.RData",
+  "path/to/kpi_salience.RData",
+  "path/to/kpi_action.RData",
+  "path/to/kpi_optimism.RData", 
+  "path/to/kpi_brand.RData",
+  "path/to/kpi_inspiration.RData"
+)
+
+# Process each KPI file and collect results
+all_kpi_data <- list()
+for (kpi_file in kpi_files) {
+  cat("Processing", kpi_file, "...\n")
+  
+  # Try to process the file
+  tryCatch({
+    kpi_data <- extract_summary_frames(kpi_file)
+    if (!is.null(kpi_data)) {
+      all_kpi_data[[basename(kpi_file)]] <- kpi_data
+      cat("  Found", nrow(kpi_data), "rows from", kpi_file, "\n")
+    } else {
+      cat("  No summary data frames found in", kpi_file, "\n")
+    }
+  }, error = function(e) {
+    cat("  Error processing", kpi_file, ":", e$message, "\n")
+  })
+}
+
+# Combine all KPI data into one master data frame
+master_data <- bind_rows(all_kpi_data)
+
+# Print summary of the combined data
+cat("\nMaster data frame created with", nrow(master_data), "rows and", ncol(master_data), "columns\n")
+cat("KPIs included:", paste(unique(master_data$KPI), collapse = ", "), "\n")
+
+# Save the combined data to a RData file
+save(master_data, file = "all_kpi_summary_data.RData")
+cat("Combined data saved to 'all_kpi_summary_data.RData'\n")
+
+# If you want to export to CSV as well
+write.csv(master_data, "all_kpi_summary_data.csv", row.names = FALSE)
+cat("Combined data also saved to 'all_kpi_summary_data.csv'\n")
