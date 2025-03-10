@@ -26,7 +26,7 @@ create_inspiration_dfs <- function(data, country_code, audience_var = NULL) {
   if(is.null(audience_var)) {
     base_name <- paste0(country_code, "_genpop_inspiration")  # Default to genpop if no audience specified
   } else {
-    base_name <- paste0(country_code, "_", audience_var, "_inspire")
+    base_name <- paste0(country_code, "_", audience_var, "_inspiration")
   }
   
  content_groups <- list(
@@ -161,7 +161,7 @@ add_inspiration_to_all_dfs()
 ```
 
 ```{r}
-# Function to calculate trust percentages for all trust data frames
+# Function to calculate inspiration percentages for all trust data frames
 
 calculate_inspiration_percentages <- function() {
   # Get names of all data frames in the global environment that have percentage_inspiration column
