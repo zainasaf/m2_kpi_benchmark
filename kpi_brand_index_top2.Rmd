@@ -1,0 +1,186 @@
+---
+title: "brand_index_top2"
+author: "Zain"
+date: "2025-03-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+```
+
+```{r}
+
+library(here)
+library(tidyverse)
+
+```
+
+```{r}
+
+ kpi <- read.csv(here("data", "kpi_var.csv"))
+
+```
+
+```{r}
+create_brand_dfs <- function(data, country_code, audience_var = NULL) {
+  if(is.null(audience_var)) {
+    base_name <- paste0(country_code, "_genpop_brand")  # Default to genpop if no audience specified
+  } else {
+    base_name <- paste0(country_code, "_", audience_var, "_brand")
+  }
+  
+  content_groups <- list(
+    all_media = NULL,  # No additional filtering
+    videos = c("Videos"),
+    articles = "Articles",
+    static = c("Social Media")
+  )
+  result_dfs <- list()
+  
+  for (group_name in names(content_groups)) {
+    content_types <- content_groups[[group_name]]
+    
+    df_name_all <- paste0(base_name, "_all_content_", group_name)
+    
+    # Modified base filter to include issue variables
+    base_filter <- data %>%
+      select(brand, content_type, gates_compare_other, market) %>%
+      filter(market == country_code)
+    
+    if(!is.null(audience_var)) {
+      # Add the audience variable to the selection
+      base_filter <- data %>%
+        select(brand, content_type, gates_compare_other, market, !!sym(audience_var)) %>%
+        filter(market == country_code, !!sym(audience_var) == 1)
+    }
+    
+    # Add salience variable based on issue score
+    base_filter <- base_filter %>%
+      mutate(salience = ifelse(brand <= 1, "Positive", "Not Positive"))
+    
+    if (!is.null(content_types)) {
+      if (length(content_types) == 1) {
+        # Single value
+        result_dfs[[df_name_all]] <- base_filter %>% 
+          filter(content_type == content_types)
+      } else {
+        # Multiple values
+        result_dfs[[df_name_all]] <- base_filter %>% 
+          filter(content_type %in% content_types)
+      }
+    } else {
+      # No content type filter
+      result_dfs[[df_name_all]] <- base_filter
+    }
+    
+    df_name_gates <- paste0(base_name, "_gates_content_", group_name)
+    base_filter_gates <- base_filter %>% filter(gates_compare_other == 1)
+    
+    # Apply content type filter if needed
+    if (!is.null(content_types)) {
+      if (length(content_types) == 1) {
+        # Single value
+        result_dfs[[df_name_gates]] <- base_filter_gates %>% 
+          filter(content_type == content_types)
+      } else {
+        # Multiple values
+        result_dfs[[df_name_gates]] <- base_filter_gates %>% 
+          filter(content_type %in% content_types)
+      }
+    } else {
+      # No content type filter
+      result_dfs[[df_name_gates]] <- base_filter_gates
+    }
+  }
+  
+  return(result_dfs)
+}
+
+# Create all dataframes for each country and audience combination
+countries <- c("us", "uk", "rsa", "in")
+audience_vars <- c("OL", "po_base", "posai", "Base")
+all_dfs <- list()
+
+# create the genpop dataframes (no specific audience filtering)
+for (country in countries) {
+  country_dfs <- create_brand_dfs(kpi, country)  # No audience filter
+  all_dfs <- c(all_dfs, country_dfs)
+}
+
+# create dataframes for each specific audience type
+for (country in countries) {
+  for (audience in audience_vars) {
+    country_audience_dfs <- create_brand_dfs(kpi, country, audience)
+    all_dfs <- c(all_dfs, country_audience_dfs)
+  }
+}
+
+# Assign the dataframes to the global environment
+list2env(all_dfs, envir = .GlobalEnv)
+
+```
+
+```{r}
+
+calculate_brand_percentages <- function() {
+  # Get all objects in global environment
+  all_objects <- ls(envir = .GlobalEnv)
+  
+  # Create a list to store the summary dataframes
+  brand_summaries <- list()
+  
+  # Count how many dataframes we process
+  df_count <- 0
+  
+  # Process each object that is a dataframe and has a "salience" column
+  for (obj_name in all_objects) {
+    # Skip the function itself or any other non-dataframe objects
+    if (obj_name == "calculate_brand_percentages") next
+    
+    # Try to get the object
+    obj <- tryCatch({
+      get(obj_name, envir = .GlobalEnv)
+    }, error = function(e) {
+      NULL
+    })
+    
+    # Check if it's a dataframe with a salience column
+    if (is.data.frame(obj) && "salience" %in% names(obj)) {
+      df_count <- df_count + 1
+      
+      # Count total respondents
+      total_count <- nrow(obj)
+      
+      # Count salient respondents
+      positive_count <- sum(obj$salience == "Positive", na.rm = TRUE)
+      
+      # Calculate percentage
+      positive_percentage <- (positive_count / total_count) * 100
+      
+      # Create a summary data frame with only the percentage
+      summary_df <- data.frame(
+        Category = "Positive",
+        Percentage = round(positive_percentage, 1)
+      )
+      
+      # Add an identifier column for the original dataframe
+      summary_df$Source = obj_name
+      
+      # Store in our list with a new name
+      summary_name <- paste0(obj_name, "_summary")
+      brand_summaries[[summary_name]] <- summary_df
+    }
+  }
+  
+  # Return the list of summaries
+  message(paste("Created", length(brand_summaries), "brand summary data frames"))
+  return(brand_summaries)
+}
+
+# EXECUTE THE FUNCTION AND STORE RESULTS
+brand_summary_dfs <- calculate_brand_percentages()
+
+# ASSIGN SUMMARIES TO GLOBAL ENVIRONMENT
+list2env(brand_summary_dfs, envir = .GlobalEnv)
