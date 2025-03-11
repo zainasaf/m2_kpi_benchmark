@@ -44,7 +44,7 @@ create_brand_dfs <- function(data, country_code, audience_var = NULL) {
     
     df_name_all <- paste0(base_name, "_all_content_", group_name)
     
-    # Modified base filter to include issue variables
+    # Modified base filter to include trust variables
     base_filter <- data %>%
       select(brand, content_type, gates_compare_other, market) %>%
       filter(market == country_code)
@@ -56,9 +56,10 @@ create_brand_dfs <- function(data, country_code, audience_var = NULL) {
         filter(market == country_code, !!sym(audience_var) == 1)
     }
     
-    # Add salience variable based on issue score
+    # Save the original trust score in a new column
     base_filter <- base_filter %>%
-      mutate(salience = ifelse(brand <= 1, "Positive", "Not Positive"))
+      mutate(brand_score = brand) %>%
+      mutate(brand_category = ifelse(brand_score >= 5, "Positive", "Not Positive"))
     
     if (!is.null(content_types)) {
       if (length(content_types) == 1) {
@@ -134,7 +135,7 @@ calculate_brand_percentages <- function() {
   # Count how many dataframes we process
   df_count <- 0
   
-  # Process each object that is a dataframe and has a "salience" column
+  # Process each object that is a dataframe and has a "trust_category" column
   for (obj_name in all_objects) {
     # Skip the function itself or any other non-dataframe objects
     if (obj_name == "calculate_brand_percentages") next
@@ -146,23 +147,23 @@ calculate_brand_percentages <- function() {
       NULL
     })
     
-    # Check if it's a dataframe with a salience column
-    if (is.data.frame(obj) && "salience" %in% names(obj)) {
+    # Check if it's a dataframe with a trust_category column
+    if (is.data.frame(obj) && "brand_category" %in% names(obj)) {
       df_count <- df_count + 1
       
       # Count total respondents
       total_count <- nrow(obj)
       
-      # Count salient respondents
-      positive_count <- sum(obj$salience == "Positive", na.rm = TRUE)
+      # Count trust respondents (using the correct case)
+      brand_count <- sum(obj$brand_category == "Positive", na.rm = TRUE)
       
       # Calculate percentage
-      positive_percentage <- (positive_count / total_count) * 100
+      brand_percentage <- (brand_count / total_count) * 100
       
       # Create a summary data frame with only the percentage
       summary_df <- data.frame(
         Category = "Positive",
-        Percentage = round(positive_percentage, 1)
+        Percentage = round(brand_percentage, 1)
       )
       
       # Add an identifier column for the original dataframe
