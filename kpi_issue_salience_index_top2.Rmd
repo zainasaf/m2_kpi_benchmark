@@ -24,34 +24,29 @@ library(tidyverse)
 
 ```{r}
 create_issue_dfs <- function(data, country_code, audience_var = NULL) {
-
   if(is.null(audience_var)) {
     base_name <- paste0(country_code, "_genpop_issue")  # Default to genpop if no audience specified
   } else {
     base_name <- paste0(country_code, "_", audience_var, "_issue")
   }
   
- 
   content_groups <- list(
     all_media = NULL,  # No additional filtering
     videos = c("Videos"),
     articles = "Articles",
     static = c("Social Media")
   )
-
   result_dfs <- list()
   
   for (group_name in names(content_groups)) {
     content_types <- content_groups[[group_name]]
     
-      
     df_name_all <- paste0(base_name, "_all_content_", group_name)
     
-     
+    # Modified base filter to include issue variables
     base_filter <- data %>%
-      select(issue1Q13, issue2Q14, issue3Q15, content_type, gates_compare_other, market) %>%
+      select(issue, content_type, gates_compare_other, market) %>%
       filter(market == country_code)
-    
     
     if(!is.null(audience_var)) {
       # Add the audience variable to the selection
@@ -60,7 +55,10 @@ create_issue_dfs <- function(data, country_code, audience_var = NULL) {
         filter(market == country_code, !!sym(audience_var) == 1)
     }
     
-  
+    # Add salience variable based on issue score
+    base_filter <- base_filter %>%
+      mutate(salience = ifelse(issue <= 1, "Salient", "Not Salient"))
+    
     if (!is.null(content_types)) {
       if (length(content_types) == 1) {
         # Single value
@@ -72,11 +70,10 @@ create_issue_dfs <- function(data, country_code, audience_var = NULL) {
           filter(content_type %in% content_types)
       }
     } else {
-    
+      # No content type filter
       result_dfs[[df_name_all]] <- base_filter
     }
     
-
     df_name_gates <- paste0(base_name, "_gates_content_", group_name)
     base_filter_gates <- base_filter %>% filter(gates_compare_other == 1)
     
@@ -97,7 +94,6 @@ create_issue_dfs <- function(data, country_code, audience_var = NULL) {
     }
   }
   
- 
   return(result_dfs)
 }
 
@@ -112,7 +108,7 @@ for (country in countries) {
   all_dfs <- c(all_dfs, country_dfs)
 }
 
-#  create dataframes for each specific audience type
+# create dataframes for each specific audience type
 for (country in countries) {
   for (audience in audience_vars) {
     country_audience_dfs <- create_issue_dfs(kpi, country, audience)
@@ -124,6 +120,89 @@ for (country in countries) {
 list2env(all_dfs, envir = .GlobalEnv)
 
 ```
+
+```{r}
+calculate_salience_percentages <- function() {
+  # Get all objects in global environment
+  all_objects <- ls(envir = .GlobalEnv)
+  
+  # Create a list to store the summary dataframes
+  salience_summaries <- list()
+  
+  # Count how many dataframes we process
+  df_count <- 0
+  
+  # Process each object that is a dataframe and has a "salience" column
+  for (obj_name in all_objects) {
+    # Skip the function itself or any other non-dataframe objects
+    if (obj_name == "calculate_salience_percentages") next
+    
+    # Try to get the object
+    obj <- tryCatch({
+      get(obj_name, envir = .GlobalEnv)
+    }, error = function(e) {
+      NULL
+    })
+    
+    # Check if it's a dataframe with a salience column
+    if (is.data.frame(obj) && "salience" %in% names(obj)) {
+      df_count <- df_count + 1
+      
+      # Count total respondents
+      total_count <- nrow(obj)
+      
+      # Count salient respondents
+      salient_count <- sum(obj$salience == "Salient", na.rm = TRUE)
+      
+      # Calculate percentage
+      salient_percentage <- (salient_count / total_count) * 100
+      
+      # Create a summary data frame with only the percentage
+      summary_df <- data.frame(
+        Category = "Salient",
+        Percentage = round(salient_percentage, 1)
+      )
+      
+      # Add an identifier column for the original dataframe
+      summary_df$Source = obj_name
+      
+      # Store in our list with a new name
+      summary_name <- paste0(obj_name, "_summary")
+      salience_summaries[[summary_name]] <- summary_df
+    }
+  }
+  
+  # Return the list of summaries
+  message(paste("Created", length(salience_summaries), "salience summary data frames"))
+  return(salience_summaries)
+}
+
+# EXECUTE THE FUNCTION AND STORE RESULTS
+salience_summary_dfs <- calculate_salience_percentages()
+
+# ASSIGN SUMMARIES TO GLOBAL ENVIRONMENT
+list2env(salience_summary_dfs, envir = .GlobalEnv)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ```{r}
