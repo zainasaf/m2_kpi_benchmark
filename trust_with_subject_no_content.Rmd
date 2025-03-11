@@ -200,3 +200,306 @@ trust_summary_dfs <- calculate_trust_percentages()
 
 # ASSIGN SUMMARIES TO GLOBAL ENVIRONMENT
 list2env(trust_summary_dfs, envir = .GlobalEnv)
+```
+
+```{r}
+create_trust_dfs <- function(data, country_code, audience_var = NULL, subject) {
+  # Base name construction for market and audience
+  if(is.null(audience_var)) {
+    base_name <- paste0(country_code, "_genpop_trust")  # Default to genpop if no audience specified
+  } else {
+    base_name <- paste0(country_code, "_", audience_var, "_trust")
+  }
+  
+  # Always add subject to base name
+  base_name <- paste0(base_name, "_", subject)
+  
+  result_dfs <- list()
+  
+  # Create all content dataframe name
+  df_name_all <- paste0(base_name, "_all_content")
+  
+  # Base filter with all relevant variables - now including content_id
+  # Using gender.y with period instead of underscore
+  base_cols <- c("trust", "gates_compare_other", "market", "content_id",
+                "health", "science_innovation", "agriculture", "education", 
+                "development_issues", "environment_climate_change", "gender.y")
+  
+  if(!is.null(audience_var)) {
+    base_cols <- c(base_cols, audience_var)
+  }
+  
+  # Start with base filter by country
+  base_filter <- data %>%
+    select(all_of(base_cols)) %>%
+    filter(market == country_code)
+  
+  # Add audience filtering if specified
+  if(!is.null(audience_var)) {
+    base_filter <- base_filter %>%
+      filter(!!sym(audience_var) == 1)
+  }
+  
+  # Filter by subject or no_subject
+  if(subject == "no_subject") {
+    # For "no_subject", filter where ALL subject variables are 0
+    subject_cols <- c("health", "science_innovation", "agriculture", "education", 
+                     "development_issues", "environment_climate_change", "gender.y")
+    
+    # Create a filter where all subject columns equal 0
+    base_filter <- base_filter %>%
+      filter(health == 0 & 
+             science_innovation == 0 & 
+             agriculture == 0 & 
+             education == 0 & 
+             development_issues == 0 & 
+             environment_climate_change == 0 & 
+             gender.y == 0)
+  } else if(subject %in% names(base_filter)) {
+    # For specific subjects, filter as before
+    base_filter <- base_filter %>%
+      filter(!!sym(subject) == 1)
+  } else {
+    warning(paste("Subject column", subject, "not found in the data"))
+    # Return empty list if subject not found
+    return(list())
+  }
+  
+  # Save the original trust score in a new column and categorize
+  base_filter <- base_filter %>%
+    mutate(trust_score = trust) %>%
+    mutate(trust_category = ifelse(trust >= 5, "TRUST", "Not TRUST"))
+  
+  # Store the all content dataframe
+  result_dfs[[df_name_all]] <- base_filter
+  
+  # Create gates-specific dataframe
+  df_name_gates <- paste0(base_name, "_gates_content")
+  base_filter_gates <- base_filter %>% filter(gates_compare_other == 1)
+  
+  # Store the gates content dataframe
+  result_dfs[[df_name_gates]] <- base_filter_gates
+  
+  return(result_dfs)
+}
+
+# Define all dimensions for our analysis
+countries <- c("us", "uk", "rsa", "in")
+audience_vars <- c("OL", "po_base", "posai", "Base")
+subjects <- c("health", "science_innovation", "agriculture", "education", 
+              "development_issues", "environment_climate_change", "gender.y", "no_subject")
+all_dfs <- list()
+
+# Create data frames for all country, audience, subject combinations
+for (country in countries) {
+  # For genpop with each subject
+  for (subject in subjects) {
+    country_subject_dfs <- create_trust_dfs(kpi, country, NULL, subject)
+    all_dfs <- c(all_dfs, country_subject_dfs)
+  }
+  
+  # For each specific audience and subject combination
+  for (audience in audience_vars) {
+    for (subject in subjects) {
+      country_audience_subject_dfs <- create_trust_dfs(kpi, country, audience, subject)
+      all_dfs <- c(all_dfs, country_audience_subject_dfs)
+    }
+  }
+}
+
+# Assign the dataframes to the global environment
+list2env(all_dfs, envir = .GlobalEnv)
+
+```
+
+```{r}
+
+# Calculate trust percentages and unique content_id count
+calculate_trust_percentages <- function() {
+  # Get all objects in global environment
+  all_objects <- ls(envir = .GlobalEnv)
+  
+  # Create a list to store the summary dataframes
+  trust_summaries <- list()
+  
+  # Count how many dataframes we process
+  df_count <- 0
+  
+  # Process each object that is a dataframe and has a "trust_category" column
+  for (obj_name in all_objects) {
+    # Skip the function itself or any other non-dataframe objects
+    if (obj_name == "calculate_trust_percentages") next
+    
+    # Try to get the object
+    obj <- tryCatch({
+      get(obj_name, envir = .GlobalEnv)
+    }, error = function(e) {
+      NULL
+    })
+    
+    # Check if it's a dataframe with a trust_category column
+    if (is.data.frame(obj) && "trust_category" %in% names(obj)) {
+      df_count <- df_count + 1
+      
+      # Count total respondents
+      total_count <- nrow(obj)
+      
+      # Skip data frames with zero rows
+      if (total_count == 0) {
+        next
+      }
+      
+      # Count trust respondents (using the correct case)
+      trust_count <- sum(obj$trust_category == "TRUST", na.rm = TRUE)
+      
+      # Calculate percentage
+      trust_percentage <- (trust_count / total_count) * 100
+      
+      # Count unique content_id values
+      unique_content_count <- length(unique(obj$content_id))
+      
+      # Create a summary data frame with percentages and unique count
+      summary_df <- data.frame(
+        Category = "Trust",
+        Percentage = round(trust_percentage, 1),
+        UniqueContentCount = unique_content_count
+      )
+      
+      # Add an identifier column for the original dataframe
+      summary_df$Source = obj_name
+      
+      # Store in our list with a new name
+      summary_name <- paste0(obj_name, "_summary")
+      trust_summaries[[summary_name]] <- summary_df
+    }
+  }
+  
+  # Return the list of summaries
+  message(paste("Created", length(trust_summaries), "trust summary data frames"))
+  return(trust_summaries)
+}
+
+# EXECUTE THE FUNCTION AND STORE RESULTS
+trust_summary_dfs <- calculate_trust_percentages()
+
+# ASSIGN SUMMARIES TO GLOBAL ENVIRONMENT
+list2env(trust_summary_dfs, envir = .GlobalEnv)
+
+# Function to just get the unique content_id counts for all dataframes
+get_unique_content_counts <- function() {
+  # Get all objects in global environment
+  all_objects <- ls(envir = .GlobalEnv)
+  
+  # Create a data frame to store the counts
+  content_counts <- data.frame(
+    DataFrameName = character(),
+    UniqueContentCount = integer(),
+    TotalRows = integer(),
+    stringsAsFactors = FALSE
+  )
+  
+  # Process each object that is a dataframe and has a "content_id" column
+  for (obj_name in all_objects) {
+    # Skip functions
+    if (obj_name %in% c("get_unique_content_counts", "calculate_trust_percentages", "create_trust_dfs")) next
+    
+    # Skip summary data frames
+    if (grepl("_summary$", obj_name)) next
+    
+    # Try to get the object
+    obj <- tryCatch({
+      get(obj_name, envir = .GlobalEnv)
+    }, error = function(e) {
+      NULL
+    })
+    
+    # Check if it's a dataframe with a content_id column
+    if (is.data.frame(obj) && "content_id" %in% names(obj)) {
+      # Count unique content_id values
+      unique_count <- length(unique(obj$content_id))
+      total_rows <- nrow(obj)
+      
+      # Add to the counts data frame
+      content_counts <- rbind(content_counts, data.frame(
+        DataFrameName = obj_name,
+        UniqueContentCount = unique_count,
+        TotalRows = total_rows
+      ))
+    }
+  }
+  
+  # Sort by number of unique content IDs (descending)
+  content_counts <- content_counts[order(-content_counts$UniqueContentCount), ]
+  
+  return(content_counts)
+}
+
+# Example usage:
+# content_id_counts <- get_unique_content_counts()
+# View(content_id_counts)
+# write.csv(content_id_counts, "content_id_counts.csv", row.names = FALSE)
+```
+
+```{r}
+display_content_counts <- function() {
+  # Get all objects in global environment
+  all_objects <- ls(envir = .GlobalEnv)
+  
+  # Create a data frame to store the counts
+  content_counts <- data.frame(
+    DataFrameName = character(),
+    UniqueContentCount = integer(),
+    TotalRows = integer(),
+    stringsAsFactors = FALSE
+  )
+  
+  # Process each object that is a dataframe and has a "content_id" column
+  for (obj_name in all_objects) {
+    # Skip functions
+    if (obj_name %in% c("display_content_counts", "calculate_trust_percentages", "create_trust_dfs")) next
+    
+    # Skip summary data frames
+    if (grepl("_summary$", obj_name)) next
+    
+    # Try to get the object
+    obj <- tryCatch({
+      get(obj_name, envir = .GlobalEnv)
+    }, error = function(e) {
+      NULL
+    })
+    
+    # Check if it's a dataframe with a content_id column
+    if (is.data.frame(obj) && "content_id" %in% names(obj)) {
+      # Count unique content_id values
+      unique_count <- length(unique(obj$content_id))
+      total_rows <- nrow(obj)
+      
+      # Add to the counts data frame
+      content_counts <- rbind(content_counts, data.frame(
+        DataFrameName = obj_name,
+        UniqueContentCount = unique_count,
+        TotalRows = total_rows
+      ))
+    }
+  }
+  
+
+  content_counts <- content_counts[order(-content_counts$UniqueContentCount), ]
+  
+
+  cat("\n=== UNIQUE CONTENT ID COUNTS ===\n\n")
+  for (i in 1:nrow(content_counts)) {
+    cat(sprintf("%s: %d unique content IDs (out of %d total rows)\n", 
+                content_counts$DataFrameName[i], 
+                content_counts$UniqueContentCount[i],
+                content_counts$TotalRows[i]))
+  }
+  cat("\nTotal data frames with content_id:", nrow(content_counts), "\n")
+  
+ 
+  invisible(content_counts)
+}
+
+
+
+display_content_counts()
