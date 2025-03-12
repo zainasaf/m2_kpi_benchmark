@@ -1,0 +1,92 @@
+---
+title: "Summary Data File Creation Index"
+author: "Zain"
+date: "2025-03-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+```{r}
+
+install.packages(c("tidyverse", "openxlsx"))
+
+```
+
+```{r}
+
+# Function to save only data frames ending with "_summary"
+save_only_summary_dfs <- function(kpi_name, output_path = "summary_data/Index") {
+  # Ensure output directory exists
+  dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+  
+  # Find all objects in the global environment
+  all_objects <- ls(envir = .GlobalEnv)
+  
+  # Find objects that end with "_summary" 
+  summary_objects <- all_objects[grepl("_summary$", all_objects)]
+  
+  # Filter for objects related to the specified KPI (if kpi_name is not NULL)
+  if (!is.null(kpi_name) && kpi_name != "") {
+    kpi_summary_objects <- summary_objects[grepl(kpi_name, summary_objects, ignore.case = TRUE)]
+  } else {
+    kpi_summary_objects <- summary_objects
+  }
+  
+  # Further filter to ensure they are data frames
+  kpi_summary_dfs <- kpi_summary_objects[sapply(kpi_summary_objects, function(x) {
+    is.data.frame(get(x, envir = .GlobalEnv))
+  })]
+  
+  # Check if we found any matching data frames
+  if (length(kpi_summary_dfs) > 0) {
+    # Construct filename
+    if (!is.null(kpi_name) && kpi_name != "") {
+      filename <- file.path(output_path, paste0("kpi_", kpi_name, ".RData"))
+    } else {
+      filename <- file.path(output_path, "all_summary_dfs.RData")
+    }
+    
+    # Save the data frames
+    save(list = kpi_summary_dfs, file = filename)
+    
+    cat("Saved", length(kpi_summary_dfs), "summary data frames to", filename, "\n")
+    cat("Sample of saved data frames:\n")
+    print(head(kpi_summary_dfs, 10))
+    
+    return(TRUE)
+  } else {
+    cat("No summary data frames found", 
+        if(!is.null(kpi_name) && kpi_name != "") paste("for KPI:", kpi_name) else "", 
+        "\n")
+    return(FALSE)
+  }
+}
+
+# Example usage:
+# To save all summary data frames for the trust KPI:
+save_only_summary_dfs("optimistic")
+
+# To save all summary data frames for the trust KPI:
+ #save_only_summary_dfs("trust")
+
+# To save ALL summary data frames (across all KPIs):
+# save_only_summary_dfs("")
+
+```
+
+```{r}
+
+load("summary_data/Index/kpi_issue.RData")
+load("summary_data/Index/kpi_trust.RData")
+load("summary_data/Index/kpi_inspiration.RData")
+load("summary_data/Index/kpi_brand.RData")
+load("sumary_data/Index/kpi_optimism.RData")
+
+
+
+
+
