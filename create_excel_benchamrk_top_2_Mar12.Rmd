@@ -1,0 +1,316 @@
+---
+title: "Excel Benchmark Index Top 2"
+author: "Zain"
+date: "2025-03-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r}
+# Load required libraries
+library(dplyr)
+library(tidyr)
+library(openxlsx)
+
+```
+
+```{r}
+# Function to create the Excel workbook
+create_benchmark_excel <- function(kpi_files, output_file = "KPI_Benchmarks.xlsx") {
+  # Create a list to store data from each KPI
+  all_kpi_data <- list()
+  
+  # Process each KPI file
+  for (i in seq_along(kpi_files)) {
+    file_path <- kpi_files[i]
+    
+    # Extract KPI name from the file path
+    kpi_name <- gsub("kpi_", "", gsub(".RData", "", basename(file_path)))
+    
+    cat("Processing", kpi_name, "data...\n")
+    
+    # Process the file
+    kpi_data <- process_kpi_file(file_path, kpi_name)
+    
+    if (!is.null(kpi_data)) {
+      # Count missing values
+      missing_count <- sum(is.na(kpi_data$Benchmark))
+      if (missing_count > 0) {
+        cat("  Warning:", missing_count, "out of", nrow(kpi_data), 
+            "benchmark values are missing for", kpi_name, "\n")
+      }
+      
+      # Check for extreme values
+      if (any(kpi_data$Benchmark > 1, na.rm = TRUE)) {
+        cat("  Warning: Some benchmark values are > 1 for", kpi_name, 
+            "- max value:", max(kpi_data$Benchmark, na.rm = TRUE), "\n")
+      }
+      
+      all_kpi_data[[kpi_name]] <- kpi_data
+      cat("  Processed", nrow(kpi_data), "benchmark values for", kpi_name, "\n")
+    } else {
+      cat("  No data processed for", kpi_name, "\n")
+    }
+  }
+  
+  # Combine all KPI data
+  if (length(all_kpi_data) > 0) {
+    master_data <- bind_rows(all_kpi_data)
+    cat("\nCombined", nrow(master_data), "total benchmark values\n")
+    
+    # Check for missing values in the combined data
+    missing_count <- sum(is.na(master_data$Benchmark))
+    if (missing_count > 0) {
+      cat("Warning:", missing_count, "out of", nrow(master_data), 
+          "total benchmark values are missing\n")
+    }
+  } else {
+    stop("No data could be processed from the KPI files")
+  }
+  
+  # Create a pivot table for each KPI
+  kpi_pivot_tables <- list()
+  
+  for (kpi in unique(master_data$KPI)) {
+    kpi_data <- master_data %>% filter(KPI == kpi)
+    
+    pivot_data <- kpi_data %>%
+      # Create a combination column for content and media type
+      mutate(ContentMedia = paste(MediaType, ContentType, sep = ", ")) %>%
+      # Select only the columns we need for pivoting
+      select(Market, Audience, ContentMedia, Benchmark) %>%
+      # Pivot to the desired format
+      pivot_wider(
+        id_cols = c(Market, Audience),
+        names_from = ContentMedia,
+        values_from = Benchmark
+      )
+    
+    kpi_pivot_tables[[kpi]] <- pivot_data
+  }
+  
+  # Create a combined table with all data in a format ready for filtering
+  filter_table <- master_data %>%
+    select(KPI, Market, Audience, ContentType, MediaType, Benchmark)
+  
+  # Create the Excel workbook
+  wb <- createWorkbook()
+  
+  # Add a main data sheet for filtering
+  addWorksheet(wb, "All Benchmarks")
+  writeData(wb, "All Benchmarks", filter_table, startRow = 1, startCol = 1)
+  addFilter(wb, "All Benchmarks", row = 1, cols = 1:ncol(filter_table))
+  
+  # Format the All Benchmarks sheet
+  headerStyle <- createStyle(
+    textDecoration = "bold",
+    halign = "center",
+    fgFill = "#4F81BD",
+    fontColour = "white",
+    border = "bottom"
+  )
+  
+  addStyle(wb, "All Benchmarks", headerStyle, rows = 1, cols = 1:ncol(filter_table))
+  
+  # Format benchmark as percentage with proper decimals
+  pctStyle <- createStyle(numFmt = "0.0%")
+  benchmark_col <- which(names(filter_table) == "Benchmark")
+  addStyle(wb, "All Benchmarks", pctStyle, rows = 2:(nrow(filter_table)+1), 
+           cols = benchmark_col, gridExpand = TRUE)
+  
+  # Add individual KPI sheets for the example table format
+  for (kpi in names(kpi_pivot_tables)) {
+    # Get the pivot table for this KPI
+    pivot_data <- kpi_pivot_tables[[kpi]]
+    
+    # Add a worksheet
+    addWorksheet(wb, kpi)
+    
+    # Write the data
+    writeData(wb, kpi, pivot_data, startRow = 1, startCol = 1)
+    
+    # Add filters
+    addFilter(wb, kpi, row = 1, cols = 1:2)  # Filter by Market and Audience
+    
+    # Format headers
+    addStyle(wb, kpi, headerStyle, rows = 1, cols = 1:ncol(pivot_data))
+    
+    # Format all benchmark values as percentages
+    for (col in 3:ncol(pivot_data)) {
+      addStyle(wb, kpi, pctStyle, rows = 2:(nrow(pivot_data)+1), 
+               cols = col, gridExpand = TRUE)
+    }
+    
+    # Auto-adjust column widths
+    setColWidths(wb, kpi, cols = 1:ncol(pivot_data), widths = "auto")
+  }
+  
+  # Add an instructions sheet
+  addWorksheet(wb, "Instructions")
+  writeData(wb, "Instructions", data.frame(
+    Instructions = c(
+      "This workbook contains benchmark values for multiple KPIs across different markets, audiences, content types, and media types.",
+      "",
+      "There are two ways to use this workbook:",
+      "",
+      "1. 'All Benchmarks' tab: Use this tab to filter and sort benchmarks by any combination of KPI, Market, Audience, Content Type, and Media Type.",
+      "",
+      "2. Individual KPI tabs: Each KPI has its own tab with a pivot-table style layout showing benchmarks for all combinations of content and media types.",
+      "",
+      "Example of how to read the data:",
+      "Market: US, Audience: POSAI, KPI: Trust, Content Type: GF Content, Media Type: Videos = XX% (benchmark value)",
+      "",
+      "You can use this to determine if content is:",
+      "- Baseline: Within ±Y% of the benchmark",
+      "- Overperforming: Above the benchmark by Y%",
+      "- Underperforming: Below the benchmark by Y%"
+    )
+  ))
+  
+  # Set column width for instructions
+  setColWidths(wb, "Instructions", cols = 1, widths = 120)
+  
+  # Save the workbook
+  saveWorkbook(wb, output_file, overwrite = TRUE)
+  cat("\nExcel workbook created:", output_file, "\n")
+}
+
+```
+
+```{r}
+process_kpi_file <- function(file_path, kpi_name) {
+  # Create a temporary environment to load the data
+  temp_env <- new.env()
+  
+  # Load the file
+  cat("Loading file:", file_path, "\n")
+  load(file_path, envir = temp_env)
+  
+  # Get all objects in the loaded environment
+  all_objects <- ls(envir = temp_env)
+  cat("Found", length(all_objects), "objects in", file_path, "\n")
+  
+  # Initialize a list to store processed data frames
+  processed_dfs <- list()
+  successful_count <- 0
+  
+  # Process each data frame
+  for (obj_name in all_objects) {
+    tryCatch({
+      # Get the data frame
+      df <- get(obj_name, envir = temp_env)
+      
+      # Skip if not a data frame or has no rows
+      if (!is.data.frame(df) || nrow(df) == 0) {
+        next
+      }
+      
+      # Check if df has required columns - now checking for "Percentage" only
+      if (!"Percentage" %in% names(df)) {
+        next
+      }
+      
+      # Extract information from the data frame name
+      name_parts <- strsplit(obj_name, "_")[[1]]
+      
+      # Extract market and audience - adjusted based on your name format
+      if (length(name_parts) >= 3) {
+        market <- name_parts[1]
+        audience <- name_parts[2]
+      } else {
+        next
+      }
+      
+      # Determine content_type and media_type based on the name pattern
+      if (grepl("gates", obj_name)) {
+        content_type <- "GF Content"
+      } else {
+        content_type <- "All Content"
+      }
+      
+      # Extract media type
+      if (grepl("videos", obj_name)) {
+        media_type <- "Videos"
+      } else if (grepl("articles", obj_name)) {
+        media_type <- "Articles"
+      } else if (grepl("static", obj_name)) {
+        media_type <- "Static Social"
+      } else {
+        media_type <- "All Media"
+      }
+      
+      # Get the percentage value - since each df has only one row, just take the first value
+      percentage_value <- df$Percentage[1]
+      
+      # Convert to decimal if needed
+      benchmark <- NA
+      if (!is.na(percentage_value)) {
+        if (percentage_value > 100) {
+          benchmark <- percentage_value / 100
+        } else if (percentage_value <= 1) {
+          benchmark <- percentage_value
+        } else {
+          benchmark <- percentage_value / 100
+        }
+      } else {
+        next
+      }
+      
+      # Create row for the benchmark table
+      benchmark_row <- data.frame(
+        KPI = kpi_name,
+        Market = toupper(market),
+        Audience = audience,
+        ContentType = content_type,
+        MediaType = media_type,
+        Benchmark = benchmark,
+        # Use Source for TotalCount if available, otherwise use 0
+        TotalCount = ifelse("Source" %in% names(df), as.numeric(df$Source[1]), 0)
+      )
+      
+      # Add to our list
+      processed_dfs[[obj_name]] <- benchmark_row
+      successful_count <- successful_count + 1
+      
+      # Print progress periodically
+      if (successful_count %% 20 == 0) {
+        cat("Processed", successful_count, "data frames so far for", kpi_name, "\n")
+      }
+      
+    }, error = function(e) {
+      cat("Error processing", obj_name, ":", conditionMessage(e), "\n")
+    })
+  }
+  
+  # Combine all processed data frames
+  if (length(processed_dfs) > 0) {
+    combined_df <- bind_rows(processed_dfs)
+    cat("Successfully processed", length(processed_dfs), "out of", length(all_objects), 
+        "objects for", kpi_name, "\n")
+    return(combined_df)
+  } else {
+    cat("WARNING: No data frames could be processed for", kpi_name, "\n")
+    return(NULL)
+  }
+}
+```
+
+```{r}
+
+# Define the KPI files to process
+kpi_files <- c(
+  "summary_data/Index/kpi_issue.RData",
+  "summary_data/Index/kpi_trust.RData",
+  "summary_data/Index/kpi_inspiration.RData",
+  "summary_data/Index/kpi_brand.RData",
+  "summary_data/Index/kpi_optimistic.RData"
+)
+
+# Verify files exist
+file.exists(kpi_files)
+
+# Create the Excel workbook
+create_benchmark_excel(kpi_files, "KPI_Benchmarks_Index_Top2.xlsx")
