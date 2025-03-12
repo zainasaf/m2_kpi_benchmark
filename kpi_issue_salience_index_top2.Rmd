@@ -57,7 +57,7 @@ create_issue_dfs <- function(data, country_code, audience_var = NULL) {
     
     # Add salience variable based on issue score
     base_filter <- base_filter %>%
-      mutate(salience = ifelse(issue <= 1, "Salient", "Not Salient"))
+      mutate(salience = ifelse(issue >= 5, "Salient", "Not Salient"))
     
     if (!is.null(content_types)) {
       if (length(content_types) == 1) {

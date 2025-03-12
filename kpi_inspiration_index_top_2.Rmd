@@ -51,7 +51,7 @@ create_inspiration_dfs <- function(data, country_code, audience_var = NULL) {
 
     base_filter <- base_filter %>%
       mutate(inspiration_score = inspiration) %>%
-      mutate(inspiration_category = ifelse(inspiration <= 1, "INSPIRED", "Not INSPIRED"))
+      mutate(inspiration_category = ifelse(inspiration >= 5, "INSPIRED", "Not INSPIRED"))
     
     if (!is.null(content_types)) {
       if (length(content_types) == 1) {
