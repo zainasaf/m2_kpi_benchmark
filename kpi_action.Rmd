@@ -101,7 +101,6 @@ create_action_dfs <- function(data, country_code, audience_var = NULL) {
   return(result_dfs)
 }
 
-# Create all dataframes for each country and audience combination
 countries <- c("us", "uk", "rsa", "in")
 audience_vars <- c("OL", "po_base", "posai", "Base")
 all_dfs <- list()
@@ -120,229 +119,15 @@ for (country in countries) {
   }
 }
 
-# Assign the dataframes to the global environment
 list2env(all_dfs, envir = .GlobalEnv)
 
 ```
 
 ```{r}
 
-check_dataframes <- function() {
-  all_objects <- ls(envir = .GlobalEnv)
-  action_dfs <- all_objects[grepl("_action_", all_objects)]
+#add_action_to_all_dfs <- function() { This is uncessary 
   
-  message(paste("Found", length(action_dfs), "action dataframes"))
-  
-  if (length(action_dfs) > 0) {
-    sample_df <- get(action_dfs[1])
-    message(paste("Sample dataframe:", action_dfs[1]))
-    message(paste("Number of rows:", nrow(sample_df)))
-    message(paste("Column names:", paste(names(sample_df), collapse=", ")))
-    message("Sample values from dochangemindQ2.O1:")
-    print(head(sample_df$dochangemindQ2.O1))
-  }
-}
-
-
-```
-
-```{r}
-
-
-add_action_to_all_dfs <- function() {
-  # Create a list of all data frames with action in the name
-  all_objects <- ls(envir = .GlobalEnv)
-  action_dfs <- all_objects[grepl("_action_", all_objects)]
-  
-  message(paste("Found", length(action_dfs), "action dataframes"))
-  
-  count <- 0
-  
-  # Process each dataframe
-  for (df_name in action_dfs) {
-    tryCatch({
-      # Get the dataframe
-      df <- get(df_name, envir = .GlobalEnv)
-      
-      # Check which columns are available
-      col_names <- names(df)
-      message(paste("Processing:", df_name, "with", length(col_names), "columns"))
-      
-      # Verify our target columns exist
-      required_cols <- c("dochangemindQ2.O1", "dolearnQ2.O2", "dononeQ2.O5", 
-                         "doshareQ2.O3", "dowriteQ2.O4")
-      missing_cols <- required_cols[!required_cols %in% col_names]
-      
-      if (length(missing_cols) > 0) {
-        message(paste("Skipping", df_name, "- missing columns:", paste(missing_cols, collapse=", ")))
-        next
-      }
-      
-      # Create a brand new column for each score component
-      df$action1 <- 0
-      df$action2 <- 0
-      df$action3 <- 0
-      df$action4 <- 0
-      df$action5 <- 0
-      
-      # Manually set each action value - avoid using in/== operators directly on the columns
-      for (i in 1:nrow(df)) {
-        # Check for dochangemindQ2.O1
-        val1 <- df[i, "dochangemindQ2.O1"]
-        if (!is.na(val1) && (val1 == 1 || val1 == 2)) {
-          df[i, "action1"] <- 1
-        }
-        
-        # Check for dolearnQ2.O2
-        val2 <- df[i, "dolearnQ2.O2"]
-        if (!is.na(val2) && (val2 == 1 || val2 == 2)) {
-          df[i, "action2"] <- 1
-        }
-        
-        # Check for dononeQ2.O5
-        val3 <- df[i, "dononeQ2.O5"]
-        if (!is.na(val3) && (val3 == 1 || val3 == 2)) {
-          df[i, "action3"] <- 1
-        }
-        
-        # Check for doshareQ2.O3
-        val4 <- df[i, "doshareQ2.O3"]
-        if (!is.na(val4) && (val4 == 1 || val4 == 2)) {
-          df[i, "action4"] <- 1
-        }
-        
-        # Check for dowriteQ2.O4
-        val5 <- df[i, "dowriteQ2.O4"]
-        if (!is.na(val5) && (val5 == 1 || val5 == 2)) {
-          df[i, "action5"] <- 1
-        }
-      }
-      
-      # Calculate action_score by adding the individual components
-      df$action_score <- df$action1 + df$action2 + df$action3 + df$action4 + df$action5
-      
-      # Create percentage_action
-      df$percentage_action <- ifelse(df$action_score >= 3, "Take Action", "No Action")
-      
-      # Update the dataframe
-      assign(df_name, df, envir = .GlobalEnv)
-      count <- count + 1
-      
-      # Clean up intermediate columns if desired
-      df$action1 <- NULL
-      df$action2 <- NULL
-      df$action3 <- NULL
-      df$action4 <- NULL
-      df$action5 <- NULL
-      
-      # Update one more time
-      assign(df_name, df, envir = .GlobalEnv)
-      
-      message(paste("Successfully processed:", df_name))
-      
-    }, error = function(e) {
-      message(paste("Error processing", df_name, ":", e$message))
-    })
-  }
-  
-  message(paste("Action column added to", count, "data frames"))
-}
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-```{r}
-add_action_to_all_dfs <- function() {
-  all_objects <- ls(envir = .GlobalEnv)
-  
-  # Filter for dataframes containing the required action columns
-  df_names <- all_objects[sapply(all_objects, function(x) {
-    obj <- get(x)
-    is.data.frame(obj) && 
-      "dochangemindQ2.O1" %in% names(obj) && 
-      "dolearnQ2.O2" %in% names(obj) && 
-      "dononeQ2.O5" %in% names(obj) && 
-      "doshareQ2.O3" %in% names(obj) && 
-      "dowriteQ2.O4" %in% names(obj)
-  })]
-  
-  message(paste("Found", length(df_names), "dataframes with required columns"))
-  
-  # If no dataframes match, return early
-  if(length(df_names) == 0) {
-    message("No matching dataframes found.")
-    return(NULL)
-  }
-  
-  count <- 0
-  
-  # Loop through each dataframe and add action column
-  for (df_name in df_names) {
-    tryCatch({
-      # Get the dataframe
-      df <- get(df_name, envir = .GlobalEnv)
-      
-      # Manual approach without using dataframe operations
-      action_scores <- rep(0, nrow(df))
-      
-      # Process each row individually
-      for (i in 1:nrow(df)) {
-        score <- 0
-        
-        # Check each column and increment score if value is 1 or 2
-        if (!is.na(df[i, "dochangemindQ2.O1"]) && (df[i, "dochangemindQ2.O1"] == 1 || df[i, "dochangemindQ2.O1"] == 2)) score <- score + 1
-        if (!is.na(df[i, "dolearnQ2.O2"]) && (df[i, "dolearnQ2.O2"] == 1 || df[i, "dolearnQ2.O2"] == 2)) score <- score + 1
-        if (!is.na(df[i, "dononeQ2.O5"]) && (df[i, "dononeQ2.O5"] == 1 || df[i, "dononeQ2.O5"] == 2)) score <- score + 1
-        if (!is.na(df[i, "doshareQ2.O3"]) && (df[i, "doshareQ2.O3"] == 1 || df[i, "doshareQ2.O3"] == 2)) score <- score + 1
-        if (!is.na(df[i, "dowriteQ2.O4"]) && (df[i, "dowriteQ2.O4"] == 1 || df[i, "dowriteQ2.O4"] == 2)) score <- score + 1
-        
-        # Store the score
-        action_scores[i] <- score
-      }
-      
-      # Add the scores to the dataframe
-      df$action_score <- action_scores
-      
-      # Create the percentage_action column
-      df$percentage_action <- ifelse(df$action_score >= 3, "Take Action", "No Action")
-      
-      # Update the dataframe in the global environment
-      assign(df_name, df, envir = .GlobalEnv)
-      
-      # Increment the count
-      count <- count + 1
-      
-      message(paste("Successfully processed:", df_name))
-      
-    }, error = function(e) {
-      message(paste("Error processing", df_name, ":", e$message))
-    })
-  }
-  
-  message(paste("Action column added to", count, "data frames"))
-  return(count)
-}
-
-
-```
-
-
-```{r}
-
-add_action_to_all_dfs <- function() {
-  all_objects <- ls(envir = .GlobalEnv)
+all_objects <- ls(envir = .GlobalEnv)
   
   # Filter for dataframes containing the required action columns
   df_names <- all_objects[sapply(all_objects, function(x) {
@@ -373,10 +158,10 @@ add_action_to_all_dfs <- function() {
     
     # Calculate action score using the temporary columns
     df$action_score <- rowSums(
-      data.frame(
+     data.frame(
         action1 = df$dochangemind %in% c(1, 2),
-        action2 = df$dolearn %in% c(1, 2),
-        action3 = df$donone %in% c(1, 2), 
+       action2 = df$dolearn %in% c(1, 2),
+       action3 = df$donone %in% c(1, 2), 
         action4 = df$doshare %in% c(1, 2),
         action5 = df$dowrite %in% c(1, 2)
       ),
@@ -399,7 +184,10 @@ add_action_to_all_dfs <- function() {
   }
   
   message(paste("Action column added to", count, "data frames"))
-}
+  
+  ##  to do this as  function need to return the function
+  
+# } This is also unecessary
 ```
 
 ```{r}
@@ -457,6 +245,12 @@ list2env(action_summary_dfs, envir = .GlobalEnv)
 ```
 
 
+
+
+
+
+
+```
 
 
 
