@@ -1,0 +1,309 @@
+---
+title: "Trust Index Top 3"
+author: "Zain"
+date: "2025-03-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r}
+
+library(here)
+library(tidyverse)
+
+```
+
+```{r}
+
+ kpi <- read.csv(here("data", "kpi_var.csv"))
+
+```
+
+
+
+```{r}
+create_trust_dfs <- function(data, country_code = NULL, audience_var = NULL) {
+  # Handle the base name differently for global vs country-specific
+  if(is.null(country_code)) {
+    if(is.null(audience_var)) {
+      base_name <- "global_genpop_trust"
+    } else {
+      base_name <- paste0("global_", audience_var, "_trust")
+    }
+  } else {
+    if(is.null(audience_var)) {
+      base_name <- paste0(country_code, "_genpop_trust")
+    } else {
+      base_name <- paste0(country_code, "_", audience_var, "_trust")
+    }
+  }
+  
+  content_groups <- list(
+    all_media = NULL,  # No additional filtering
+    videos = c("Videos"),
+    articles = "Articles",
+    static = c("Social Media")
+  )
+  result_dfs <- list()
+  
+  for (group_name in names(content_groups)) {
+    content_types <- content_groups[[group_name]]
+    
+    df_name_all <- paste0(base_name, "_all_content_", group_name)
+    
+    # Modified base filter to include trust variables
+    if(is.null(country_code)) {
+      # Global analysis - no country filter
+      base_filter <- data %>%
+        select(trust, content_type, gates_compare_other, market)
+      
+      if(!is.null(audience_var)) {
+        # Add the audience variable to the selection for specific audience
+        base_filter <- data %>%
+          select(trust, content_type, gates_compare_other, market, !!sym(audience_var)) %>%
+          filter(!!sym(audience_var) == 1)
+      }
+    } else {
+      # Country-specific analysis
+      base_filter <- data %>%
+        select(trust, content_type, gates_compare_other, market) %>%
+        filter(market == country_code)
+      
+      if(!is.null(audience_var)) {
+        # Add the audience variable to the selection for specific audience
+        base_filter <- data %>%
+          select(trust, content_type, gates_compare_other, market, !!sym(audience_var)) %>%
+          filter(market == country_code, !!sym(audience_var) == 1)
+      }
+    }
+    
+    # Save the original trust score in a new column
+    base_filter <- base_filter %>%
+      mutate(trust_score = trust) %>%
+      mutate(trust_category = ifelse(trust >= 4, "TRUST", "Not TRUST"))
+    
+    if (!is.null(content_types)) {
+      if (length(content_types) == 1) {
+        # Single value
+        result_dfs[[df_name_all]] <- base_filter %>% 
+          filter(content_type == content_types)
+      } else {
+        # Multiple values
+        result_dfs[[df_name_all]] <- base_filter %>% 
+          filter(content_type %in% content_types)
+      }
+    } else {
+      # No content type filter
+      result_dfs[[df_name_all]] <- base_filter
+    }
+    
+    df_name_gates <- paste0(base_name, "_gates_content_", group_name)
+    base_filter_gates <- base_filter %>% filter(gates_compare_other == 1)
+    
+    # Apply content type filter if needed
+    if (!is.null(content_types)) {
+      if (length(content_types) == 1) {
+        # Single value
+        result_dfs[[df_name_gates]] <- base_filter_gates %>% 
+          filter(content_type == content_types)
+      } else {
+        # Multiple values
+        result_dfs[[df_name_gates]] <- base_filter_gates %>% 
+          filter(content_type %in% content_types)
+      }
+    } else {
+      # No content type filter
+      result_dfs[[df_name_gates]] <- base_filter_gates
+    }
+  }
+  
+  return(result_dfs)
+}
+
+# Create all dataframes for each country, global, and audience combination
+countries <- c("us", "uk", "rsa", "in")
+audience_vars <- c("OL", "po_base", "posai", "Base")
+all_dfs <- list()
+
+# create the global genpop dataframe (no country filter, no specific audience filtering)
+global_dfs <- create_trust_dfs(kpi)  # No country filter, no audience filter
+all_dfs <- c(all_dfs, global_dfs)
+
+# create the global audience-specific dataframes
+for (audience in audience_vars) {
+  global_audience_dfs <- create_trust_dfs(kpi, NULL, audience)  # No country filter, specific audience
+  all_dfs <- c(all_dfs, global_audience_dfs)
+}
+
+# create the country-specific genpop dataframes (no specific audience filtering)
+for (country in countries) {
+  country_dfs <- create_trust_dfs(kpi, country)  # Country filter, no audience filter
+  all_dfs <- c(all_dfs, country_dfs)
+}
+
+# create dataframes for each specific country and audience type
+for (country in countries) {
+  for (audience in audience_vars) {
+    country_audience_dfs <- create_trust_dfs(kpi, country, audience)
+    all_dfs <- c(all_dfs, country_audience_dfs)
+  }
+}
+
+# Assign the dataframes to the global environment
+list2env(all_dfs, envir = .GlobalEnv)
+
+```
+
+```{r}
+
+# Function to calculate trust percentages with confidence intervals
+calculate_trust_percentages <- function() {
+  # Get all objects in global environment
+  all_objects <- ls(envir = .GlobalEnv)
+  
+  # Create lists to store the summary dataframes
+  trust_summaries <- list()
+  trust_summaries_full <- list()
+  
+  # Count how many dataframes we process
+  df_count <- 0
+  
+  # Process each object that is a dataframe and has a "trust_category" column
+  for (obj_name in all_objects) {
+    # Skip the function itself or any other non-dataframe objects
+    if (obj_name == "calculate_trust_percentages") next
+    
+    # Try to get the object
+    obj <- tryCatch({
+      get(obj_name, envir = .GlobalEnv)
+    }, error = function(e) {
+      NULL
+    })
+    
+    # Check if it's a dataframe with a trust_category column
+    if (is.data.frame(obj) && "trust_category" %in% names(obj)) {
+      df_count <- df_count + 1
+      
+      # Count total respondents
+      total_count <- nrow(obj)
+      
+      # Count trust respondents (using the correct case)
+      trust_count <- sum(obj$trust_category == "TRUST", na.rm = TRUE)
+      
+      # Calculate percentage
+      trust_percentage <- (trust_count / total_count) * 100
+      
+      # Calculate confidence interval (Wilson score interval for proportions)
+      # Using 95% confidence level (z=1.96)
+      z <- 1.96
+      p <- trust_count / total_count
+      
+      # Avoid division by zero
+      if (total_count > 0) {
+        # Wilson score interval formula
+        denominator <- 1 + (z^2/total_count)
+        center <- (p + (z^2/(2*total_count))) / denominator
+        error_margin <- z * sqrt((p*(1-p) + (z^2/(4*total_count))) / total_count) / denominator
+        
+        ci_lower <- max(0, (center - error_margin) * 100)
+        ci_upper <- min(100, (center + error_margin) * 100)
+        
+        # Calculate margin of error in percentage points
+        margin_of_error <- error_margin * 100
+      } else {
+        ci_lower <- NA
+        ci_upper <- NA
+        margin_of_error <- NA
+      }
+      
+      # Calculate full statistics first (we need these for calculations)
+      summary_full <- data.frame(
+        Category = "Trust",
+        Percentage = round(trust_percentage, 0),
+        CI_Lower = round(ci_lower, 0),
+        CI_Upper = round(ci_upper, 0),
+        Margin_of_Error = round(margin_of_error, 0),
+        Sample_Size = total_count,
+        CI_Range = paste0(round(ci_lower, 0), "% - ", round(ci_upper, 0), "%"),
+        MOE_Display = paste0("±", round(margin_of_error, 0), " pp")
+      )
+      
+      # Create a simplified version with only the requested columns
+      summary_df <- summary_full %>%
+        select(Category, Percentage, MOE_Display) %>%
+        mutate(Source = obj_name)  # Add the Source column
+      
+      # Store in our list with a new name
+      summary_name <- paste0(obj_name, "_summary")
+      trust_summaries[[summary_name]] <- summary_df
+      
+      # Also store the full data in a separate list if needed for reference
+      full_name <- paste0(obj_name, "_summary_full")
+      trust_summaries_full[[full_name]] <- summary_full
+    }
+  }
+  
+  # Return the list of summaries
+  message(paste("Created", length(trust_summaries), "trust summary data frames"))
+  
+  # Return only the simplified summaries
+  return(trust_summaries)
+}
+
+# EXECUTE THE FUNCTION AND STORE RESULTS
+trust_summary_dfs <- calculate_trust_percentages()
+
+# ASSIGN SUMMARIES TO GLOBAL ENVIRONMENT
+list2env(trust_summary_dfs, envir = .GlobalEnv)
+
+```
+
+```{r}
+
+# We'll still create the consolidated tables for reference
+# Function to create a consolidated summary table
+create_trust_summary_table <- function() {
+  # Get all summary objects
+  all_objects <- ls(pattern = "_summary$", envir = .GlobalEnv)
+  
+  # Create an empty dataframe to hold all summaries
+  all_summaries <- data.frame()
+  
+  # Process each summary
+  for (obj_name in all_objects) {
+    # Skip if object name is our output names to avoid conflicts
+    if(obj_name %in% c("all_trust_summaries", "all_trust_summaries_simple")) next
+    
+    # Try to get the summary dataframe
+    summary_df <- tryCatch({
+      get(obj_name, envir = .GlobalEnv)
+    }, error = function(e) {
+      NULL
+    })
+    
+    # Only add if it's actually a dataframe
+    if(is.data.frame(summary_df)) {
+      # Add to the consolidated dataframe
+      all_summaries <- rbind(all_summaries, summary_df)
+    }
+  }
+  
+  # Return the consolidated dataframe
+  return(all_summaries)
+}
+
+# Create the consolidated summaries (but keep all individual summaries too)
+all_trust_summaries <- create_trust_summary_table()
+all_trust_summaries_simple <- all_trust_summaries %>%
+  select(-Sample_Size, -CI_Range)
+
+```
+
+```{r}
+# Save the RData file with all summaries
+save(list = ls(pattern = "_summary$"), file = "summary_data/Index/kpi_trust.RData")
+
+```
