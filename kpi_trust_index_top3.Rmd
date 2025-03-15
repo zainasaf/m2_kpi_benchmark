@@ -13,7 +13,9 @@ knitr::opts_chunk$set(echo = FALSE)
 
 library(here)
 library(tidyverse)
-
+library(boot)
+library(ggplot2)
+library(dplyr)
 ```
 
 ```{r}
@@ -22,9 +24,8 @@ library(tidyverse)
 
 ```
 
-
-
 ```{r}
+
 create_trust_dfs <- function(data, country_code = NULL, audience_var = NULL) {
   # Handle the base name differently for global vs country-specific
   if(is.null(country_code)) {
@@ -197,16 +198,17 @@ calculate_trust_percentages <- function() {
       trust_percentage <- (trust_count / total_count) * 100
       
       # Calculate confidence interval (Wilson score interval for proportions)
-      # Using 95% confidence level (z=1.96)
-      z <- 1.96
+      # Using 95% confidence level (z=1.96) for 99 % CI use 2.576
+      z <- 2.576
       p <- trust_count / total_count
       
       # Avoid division by zero
       if (total_count > 0) {
         # Wilson score interval formula
-        denominator <- 1 + (z^2/total_count)
-        center <- (p + (z^2/(2*total_count))) / denominator
-        error_margin <- z * sqrt((p*(1-p) + (z^2/(4*total_count))) / total_count) / denominator
+        # Wilson score interval formula
+   denominator <- 1 + (z^2/total_count)
+  center <- (p + (z^2/(2*total_count))) / denominator
+  error_margin <- z * sqrt((p*(1-p)/total_count) + (z^2/(4*total_count*total_count))) / denominator
         
         ci_lower <- max(0, (center - error_margin) * 100)
         ci_upper <- min(100, (center + error_margin) * 100)
@@ -225,10 +227,10 @@ calculate_trust_percentages <- function() {
         Percentage = round(trust_percentage, 0),
         CI_Lower = round(ci_lower, 0),
         CI_Upper = round(ci_upper, 0),
-        Margin_of_Error = round(margin_of_error, 0),
+        Margin_of_Error = round(margin_of_error, 0),  # Margin of error rounded to nearest whole number
         Sample_Size = total_count,
         CI_Range = paste0(round(ci_lower, 0), "% - ", round(ci_upper, 0), "%"),
-        MOE_Display = paste0("±", round(margin_of_error, 0), " pp")
+        MOE_Display = paste0("+/-", round(margin_of_error, 0), " pp")  # Using +/- instead of ±
       )
       
       # Create a simplified version with only the requested columns
@@ -295,15 +297,485 @@ create_trust_summary_table <- function() {
   return(all_summaries)
 }
 
+
 # Create the consolidated summaries (but keep all individual summaries too)
 all_trust_summaries <- create_trust_summary_table()
 all_trust_summaries_simple <- all_trust_summaries %>%
-  select(-Sample_Size, -CI_Range)
+  select(-MOE_Display)
+
+
+```
+
+```{r}
+
+# After you've run your existing code to create trust_summary_dfs
+
+
+# 2. Source the MOE functions
+# (alternatively, you can copy and paste them into your script)
+source("trust_moe_functions.R")
+
+# 3. Enhance your trust summaries with MOE calculations
+enhanced_summaries <- enhance_trust_summaries(
+  trust_summaries = trust_summary_dfs,
+  original_dfs = all_dfs,
+  use_bootstrap = TRUE,  # Set to TRUE to include bootstrap CI
+  conf.level = 0.99,     # 99% confidence interval
+  n_boot = 1000          # Number of bootstrap samples
+)
+
+# 4. Assign enhanced summaries to global environment
+list2env(enhanced_summaries, envir = .GlobalEnv)
+
+# 5. Compare Wilson and Bootstrap MOEs
+moe_comparison <- compare_moe_methods(enhanced_summaries)
+
+# 6. View the comparison summary
+head(moe_comparison)
+
+# 7. Identify cases with very small or zero MOE
+small_moe_cases <- identify_small_moe(enhanced_summaries, threshold = 0.1)
+
+# 8. View the cases with small MOE
+head(small_moe_cases)
+
+# 9. If you want to export the results
+write.csv(moe_comparison, "moe_method_comparison.csv", row.names = FALSE)
+write.csv(small_moe_cases, "small_moe_cases.csv", row.names = FALSE)
 
 ```
 
 ```{r}
 # Save the RData file with all summaries
-save(list = ls(pattern = "_summary$"), file = "summary_data/Index/kpi_trust.RData")
+
+save(list = ls(pattern = "_summary$"), file = "summary_data/top_3_index/kpi_trust_99_ci.RData")
 
 ```
+
+```{r}
+##bootstap ##
+
+# Function to perform bootstrap analysis on trust data
+# This assumes you already have the all_trust_summaries dataframe
+
+# Function to perform bootstrap for a single group's data
+bootstrap_trust_group <- function(group_name, original_dfs, n_boot = 1000, conf_level = 0.99) {
+  # Get the original dataframe for this group (without "_summary" suffix)
+  df_name <- sub("_summary$", "", group_name)
+  
+  # Check if the dataframe exists
+  if (!df_name %in% names(original_dfs)) {
+    warning(paste("Original dataframe not found for:", group_name))
+    return(NULL)
+  }
+  
+  # Get the original dataframe
+  df <- original_dfs[[df_name]]
+  
+  # Check if trust_category exists in the dataframe
+  if (!"trust_category" %in% colnames(df)) {
+    warning(paste("trust_category column not found in:", df_name))
+    return(NULL)
+  }
+  
+  # Define function to calculate trust proportion
+  calc_trust_prop <- function(data, indices) {
+    # Sample with replacement
+    boot_sample <- data[indices, ]
+    
+    # Calculate proportion of "TRUST" responses
+    trust_prop <- mean(boot_sample$trust_category == "TRUST", na.rm = TRUE)
+    
+    return(trust_prop)
+  }
+  
+  # Run bootstrap
+  boot_results <- boot(data = df, statistic = calc_trust_prop, R = n_boot)
+  
+  # Calculate confidence interval
+  alpha <- 1 - conf_level
+  boot_ci <- boot.ci(boot_results, conf = conf_level, type = "perc")
+  
+  # Extract CI values
+  ci_lower <- boot_ci$percent[4]
+  ci_upper <- boot_ci$percent[5]
+  
+  # Calculate margin of error
+  margin_of_error <- (ci_upper - ci_lower) / 2
+  
+  # Create result dataframe
+  result <- data.frame(
+    Group = group_name,
+    Original_Dataframe = df_name,
+    Sample_Size = nrow(df),
+    Bootstrap_Iterations = n_boot,
+    Trust_Proportion = boot_results$t0,
+    Trust_Percentage = boot_results$t0 * 100,
+    CI_Lower = ci_lower * 100,
+    CI_Upper = ci_upper * 100,
+    Margin_of_Error = margin_of_error * 100,
+    Confidence_Level = conf_level * 100
+  )
+  
+  return(result)
+}
+
+# Function to bootstrap all groups
+bootstrap_all_trust_groups <- function(all_trust_summaries, original_dfs, n_boot = 1000, conf_level = 0.99) {
+  # Get unique group names
+  group_names <- unique(all_trust_summaries$Summary_Name)
+  
+  # Initialize list to store results
+  bootstrap_results <- list()
+  
+  # Process each group
+  for (group_name in group_names) {
+    message(paste("Bootstrapping group:", group_name))
+    
+    result <- tryCatch({
+      bootstrap_trust_group(group_name, original_dfs, n_boot, conf_level)
+    }, error = function(e) {
+      warning(paste("Error bootstrapping group:", group_name, "-", e$message))
+      return(NULL)
+    })
+    
+    if (!is.null(result)) {
+      bootstrap_results[[group_name]] <- result
+    }
+  }
+  
+  # Combine all results into a single dataframe
+  all_bootstrap_results <- do.call(rbind, bootstrap_results)
+  
+  return(all_bootstrap_results)
+}
+
+# Function to compare Wilson and Bootstrap margins of error
+compare_wilson_bootstrap <- function(all_trust_summaries, bootstrap_results) {
+  # Prepare trust summaries
+  wilson_data <- all_trust_summaries %>%
+    select(Summary_Name, Percentage, Margin_of_Error, Sample_Size) %>%
+    rename(
+      Group = Summary_Name,
+      Wilson_Percentage = Percentage,
+      Wilson_MOE = Margin_of_Error
+    )
+  
+  # Prepare bootstrap data
+  bootstrap_data <- bootstrap_results %>%
+    select(Group, Trust_Percentage, Margin_of_Error, Sample_Size) %>%
+    rename(
+      Bootstrap_Percentage = Trust_Percentage,
+      Bootstrap_MOE = Margin_of_Error
+    )
+  
+  # Merge the datasets
+  comparison <- merge(wilson_data, bootstrap_data, by = c("Group", "Sample_Size"))
+  
+  # Calculate differences
+  comparison$Percentage_Diff = comparison$Bootstrap_Percentage - comparison$Wilson_Percentage
+  comparison$MOE_Diff = comparison$Bootstrap_MOE - comparison$Wilson_MOE
+  comparison$MOE_Ratio = comparison$Bootstrap_MOE / comparison$Wilson_MOE
+  
+  # Order by absolute difference in MOE
+  comparison <- comparison %>%
+    arrange(desc(abs(MOE_Diff)))
+  
+  return(comparison)
+}
+
+# Example usage:
+# 1. Run bootstrap analysis on all groups
+# bootstrap_results <- bootstrap_all_trust_groups(all_trust_summaries, all_dfs, n_boot = 1000, conf_level = 0.99)
+
+# 2. Compare Wilson and Bootstrap results
+# comparison <- compare_wilson_bootstrap(all_trust_summaries, bootstrap_results)
+
+# 3. Save results
+# write.csv(bootstrap_results, "bootstrap_results.csv", row.names = FALSE)
+# write.csv(comparison, "wilson_bootstrap_comparison.csv", row.names = FALSE)
+
+# 4. Identify cases with zero or very small Wilson MOE but larger bootstrap MOE
+# small_wilson_moe <- comparison %>%
+#   filter(Wilson_MOE < 0.5 & Bootstrap_MOE > Wilson_MOE * 2) %>%
+#   arrange(desc(MOE_Ratio))
+
+```
+
+```{r}
+
+# Modified bootstrap code with explicit global assignments
+# Add this to the end of your script
+
+
+# Run bootstrap analysis
+bootstrap_results <- bootstrap_all_trust_groups(
+  all_trust_summaries = all_trust_summaries, 
+  original_dfs = all_dfs,
+  n_boot = 100, 
+  conf_level = 0.99
+)
+
+# Explicitly assign to global environment
+assign("bootstrap_results", bootstrap_results, envir = .GlobalEnv)
+message("Created bootstrap_results dataframe with ", nrow(bootstrap_results), " rows")
+
+# Compare with Wilson method
+comparison <- compare_wilson_bootstrap(
+  all_trust_summaries = all_trust_summaries,
+  bootstrap_results = bootstrap_results
+)
+
+# Explicitly assign to global environment
+assign("wilson_bootstrap_comparison", comparison, envir = .GlobalEnv)
+message("Created wilson_bootstrap_comparison dataframe with ", nrow(comparison), " rows")
+
+# Find cases with small Wilson MOE but larger bootstrap MOE
+small_wilson_moe <- comparison %>%
+  filter(Wilson_MOE < 0.5 & Bootstrap_MOE > Wilson_MOE * 2) %>%
+  arrange(desc(MOE_Ratio))
+
+# Explicitly assign to global environment
+assign("small_wilson_moe", small_wilson_moe, envir = .GlobalEnv)
+message("Found ", nrow(small_wilson_moe), " cases with small Wilson MOE but larger bootstrap MOE")
+
+# View the first few rows of the results
+message("\nFirst few rows of bootstrap_results:")
+print(head(bootstrap_results))
+
+message("\nFirst few rows of wilson_bootstrap_comparison:")
+print(head(wilson_bootstrap_comparison))
+
+message("\nChecking for MOEs of exactly 0:")
+zero_moe <- comparison %>% filter(Wilson_MOE == 0)
+print(paste("Number of cases with Wilson MOE = 0:", nrow(zero_moe)))
+if(nrow(zero_moe) > 0) {
+  print(head(zero_moe))
+}
+
+```
+
+```{r}
+# Simplified bootstrap workflow specifically for your data structure
+
+
+# Function to bootstrap a single trust group
+bootstrap_single_group <- function(group_name, original_dfs, n_boot = 100) {
+  # Get the original dataframe name (remove "_summary" suffix)
+  df_name <- sub("_summary$", "", group_name)
+  
+  # Check if the dataframe exists
+  if (!df_name %in% names(original_dfs)) {
+    warning(paste("Original dataframe not found for:", group_name))
+    return(NULL)
+  }
+  
+  # Get the original dataframe
+  df <- original_dfs[[df_name]]
+  
+  # Check if trust_category exists
+  if (!"trust_category" %in% colnames(df)) {
+    warning(paste("trust_category column not found in:", df_name))
+    return(NULL)
+  }
+  
+  # Define bootstrap function
+  calc_trust_prop <- function(data, indices) {
+    boot_sample <- data[indices, ]
+    trust_prop <- mean(boot_sample$trust_category == "TRUST", na.rm = TRUE)
+    return(trust_prop)
+  }
+  
+  # Run bootstrap
+  boot_results <- boot(data = df, statistic = calc_trust_prop, R = n_boot)
+  
+  # Calculate confidence interval
+  boot_ci <- boot.ci(boot_results, conf = 0.99, type = "perc")
+  
+  # Extract values
+  ci_lower <- boot_ci$percent[4]
+  ci_upper <- boot_ci$percent[5]
+  margin_of_error <- (ci_upper - ci_lower) / 2
+  
+  # Create result
+  result <- data.frame(
+    Group = group_name,
+    Sample_Size = nrow(df),
+    Trust_Percentage = boot_results$t0 * 100,
+    CI_Lower = ci_lower * 100,
+    CI_Upper = ci_upper * 100,
+    Margin_of_Error = margin_of_error * 100
+  )
+  
+  return(result)
+}
+
+# Function to run bootstrap for multiple groups with progress tracking
+run_bootstrap_for_groups <- function(group_names, original_dfs, n_boot = 100) {
+  results <- list()
+  total_groups <- length(group_names)
+  
+  # Track progress
+  start_time <- Sys.time()
+  
+  for (i in 1:length(group_names)) {
+    group_name <- group_names[i]
+    
+    # Show progress
+    message(paste0(
+      "[", i, "/", total_groups, "] Processing: ", group_name,
+      " (", round(i/total_groups*100), "% complete)"
+    ))
+    
+    # Run bootstrap
+    result <- tryCatch({
+      bootstrap_single_group(group_name, original_dfs, n_boot)
+    }, error = function(e) {
+      warning(paste("Error processing", group_name, ":", e$message))
+      return(NULL)
+    })
+    
+    if (!is.null(result)) {
+      results[[group_name]] <- result
+    }
+    
+    # Save progress every 10 groups
+    if (i %% 10 == 0 || i == total_groups) {
+      if (length(results) > 0) {
+        interim_results <- do.call(rbind, results)
+        saveRDS(interim_results, "bootstrap_interim.rds")
+      }
+      
+      # Time estimate
+      current_time <- Sys.time()
+      elapsed <- as.numeric(difftime(current_time, start_time, units = "mins"))
+      avg_time_per_group <- elapsed / i
+      remaining_groups <- total_groups - i
+      est_remaining_time <- avg_time_per_group * remaining_groups
+      
+      message(paste(
+        "Time elapsed:", round(elapsed, 1), "min.",
+        "Est. remaining:", round(est_remaining_time, 1), "min."
+      ))
+    }
+  }
+  
+  # Combine all results
+  if (length(results) > 0) {
+    all_results <- do.call(rbind, results)
+    return(all_results)
+  } else {
+    return(NULL)
+  }
+}
+
+# Main execution function
+run_trust_bootstrap <- function(all_trust_summaries, all_dfs, max_groups = NULL, n_boot = 100) {
+  # Get unique group names
+  group_names <- unique(all_trust_summaries$Summary_Name)
+  
+  # Limit to subset if requested
+  if (!is.null(max_groups) && max_groups < length(group_names)) {
+    group_names <- group_names[1:max_groups]
+    message(paste("Processing only first", max_groups, "groups"))
+  }
+  
+  # Run bootstrap
+  bootstrap_results <- run_bootstrap_for_groups(group_names, all_dfs, n_boot)
+  
+  # Save results
+  if (!is.null(bootstrap_results)) {
+    saveRDS(bootstrap_results, "bootstrap_results.rds")
+    assign("bootstrap_results", bootstrap_results, envir = .GlobalEnv)
+    message("Bootstrap results saved to global environment as 'bootstrap_results'")
+    return(bootstrap_results)
+  } else {
+    message("No valid bootstrap results generated")
+    return(NULL)
+  }
+}
+
+
+
+test_results <- run_trust_bootstrap(all_trust_summaries, all_dfs, max_groups = 10, n_boot = 100)
+
+
+all_results <- run_trust_bootstrap(all_trust_summaries, all_dfs, n_boot = 100)
+
+# Comparison function for Wilson vs Bootstrap
+compare_results <- function(all_trust_summaries, bootstrap_results) {
+  # Extract Wilson data
+  wilson_data <- all_trust_summaries %>%
+    mutate(
+      # Extract numeric MOE from MOE_display format ("+/-X pp")
+      Wilson_MOE = as.numeric(gsub("[^0-9.]", "", MOE_Display))
+    ) %>%
+    select(Summary_Name, Percentage, Wilson_MOE, Sample_Size) %>%
+    rename(
+      Group = Summary_Name,
+      Wilson_Percentage = Percentage
+    )
+  
+  # Prepare bootstrap data
+  bootstrap_data <- bootstrap_results %>%
+    rename(
+      Bootstrap_Percentage = Trust_Percentage,
+      Bootstrap_MOE = Margin_of_Error
+    )
+  
+  # Merge datasets
+  comparison <- merge(wilson_data, bootstrap_data, by = c("Group", "Sample_Size"))
+  
+  # Calculate differences
+  comparison$Percentage_Diff = comparison$Bootstrap_Percentage - comparison$Wilson_Percentage
+  comparison$MOE_Diff = comparison$Bootstrap_MOE - comparison$Wilson_MOE
+  comparison$MOE_Ratio = comparison$Bootstrap_MOE / comparison$Wilson_MOE
+  
+  # Sort by MOE difference
+  comparison <- comparison %>%
+    arrange(desc(abs(MOE_Diff)))
+  
+  # Save to global environment
+  assign("wilson_bootstrap_comparison", comparison, envir = .GlobalEnv)
+  message("Comparison saved to global environment as 'wilson_bootstrap_comparison'")
+  
+  return(comparison)
+}
+
+
+
+
+
+test_results <- run_trust_bootstrap(all_trust_summaries, all_dfs, max_groups = 10, n_boot = 100)
+
+
+all_results <- run_trust_bootstrap(all_trust_summaries, all_dfs, n_boot = 100)
+
+comparison <- compare_results(all_trust_summaries, bootstrap_results)
+
+
+# Example usage:
+# 1. Run bootstrap on a small subset first to test
+# test_results <- run_trust_bootstrap(all_trust_summaries, all_dfs, max_groups = 10, n_boot = 100)
+
+# 2. If test is successful, run on all groups
+ all_results <- run_trust_bootstrap(all_trust_summaries, all_dfs, n_boot = 100)
+
+# 3. Compare with Wilson
+# comparison <- compare_results(all_trust_summaries, bootstrap_results)
+
+# 4. Find cases with small Wilson MOE but larger bootstrap MOE
+# small_moe_cases <- comparison %>%
+#   filter(Wilson_MOE < 1 & Bootstrap_MOE > Wilson_MOE * 2) %>%
+#   arrange(desc(MOE_Ratio))
+
+
+
+write.csv(bootstrap_results, file = "C:/Users/zaina/Documents/Focal Data/KPI Benchmark/Bootstrap/bootstrap_results.csv", row.names = FALSE)
+
+
+
+
+
+
+
