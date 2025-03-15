@@ -1,0 +1,362 @@
+---
+title: "kpi_sharing_index_top3"
+author: "Zain"
+date: "2025-03-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+```
+
+```{r}
+
+library(here)
+library(tidyverse)
+
+```
+
+```{r}
+
+ kpi <- read.csv(here("data", "kpi_var.csv"))
+
+```
+
+
+
+```{r}
+
+
+create_sharing_dfs <- function(data, country_code = NULL, audience_var = NULL) {
+  # Handle the base name differently for global vs country-specific
+  if(is.null(country_code)) {
+    if(is.null(audience_var)) {
+      base_name <- "global_genpop_sharing"
+    } else {
+      base_name <- paste0("global_", audience_var, "_sharing")
+    }
+  } else {
+    if(is.null(audience_var)) {
+      base_name <- paste0(country_code, "_genpop_sharing")
+    } else {
+      base_name <- paste0(country_code, "_", audience_var, "_sharing")
+    }
+  }
+  
+  content_groups <- list(
+    all_media = NULL,  # No additional filtering
+    videos = c("Videos"),
+    articles = "Articles",
+    static = c("Social Media")
+  )
+  result_dfs <- list()
+  
+  for (group_name in names(content_groups)) {
+    content_types <- content_groups[[group_name]]
+    
+    df_name_all <- paste0(base_name, "_all_content_", group_name)
+    
+    # Modified base filter to include sharing variables
+    if(is.null(country_code)) {
+      # Global analysis - no country filter
+      base_filter <- data %>%
+        select(sharing, content_type, gates_compare_other, market)
+      
+      if(!is.null(audience_var)) {
+        # Add the audience variable to the selection for specific audience
+        base_filter <- data %>%
+          select(sharing, content_type, gates_compare_other, market, !!sym(audience_var)) %>%
+          filter(!!sym(audience_var) == 1)
+      }
+    } else {
+      # Country-specific analysis
+      base_filter <- data %>%
+        select(sharing, content_type, gates_compare_other, market) %>%
+        filter(market == country_code)
+      
+      if(!is.null(audience_var)) {
+        # Add the audience variable to the selection for specific audience
+        base_filter <- data %>%
+          select(sharing, content_type, gates_compare_other, market, !!sym(audience_var)) %>%
+          filter(market == country_code, !!sym(audience_var) == 1)
+      }
+    }
+    
+    # Set the percentage_sharing column based on the sharing value
+    base_filter <- base_filter %>%
+      mutate(percentage_sharing = ifelse(sharing == 3, "Share", "Not Share"))
+    
+    if (!is.null(content_types)) {
+      if (length(content_types) == 1) {
+        # Single value
+        result_dfs[[df_name_all]] <- base_filter %>% 
+          filter(content_type == content_types)
+      } else {
+        # Multiple values
+        result_dfs[[df_name_all]] <- base_filter %>% 
+          filter(content_type %in% content_types)
+      }
+    } else {
+      # No content type filter
+      result_dfs[[df_name_all]] <- base_filter
+    }
+    
+    df_name_gates <- paste0(base_name, "_gates_content_", group_name)
+    base_filter_gates <- base_filter %>% filter(gates_compare_other == 1)
+    
+    # Apply content type filter if needed
+    if (!is.null(content_types)) {
+      if (length(content_types) == 1) {
+        # Single value
+        result_dfs[[df_name_gates]] <- base_filter_gates %>% 
+          filter(content_type == content_types)
+      } else {
+        # Multiple values
+        result_dfs[[df_name_gates]] <- base_filter_gates %>% 
+          filter(content_type %in% content_types)
+      }
+    } else {
+      # No content type filter
+      result_dfs[[df_name_gates]] <- base_filter_gates
+    }
+  }
+  
+  return(result_dfs)
+}
+
+# Create all dataframes for each country, global, and audience combination
+countries <- c("us", "uk", "rsa", "in")
+audience_vars <- c("OL", "po_base", "posai", "Base")
+all_dfs <- list()
+
+# create the global genpop dataframe (no country filter, no specific audience filtering)
+global_dfs <- create_sharing_dfs(kpi)  # No country filter, no audience filter
+all_dfs <- c(all_dfs, global_dfs)
+
+# create the global audience-specific dataframes
+for (audience in audience_vars) {
+  global_audience_dfs <- create_sharing_dfs(kpi, NULL, audience)  # No country filter, specific audience
+  all_dfs <- c(all_dfs, global_audience_dfs)
+}
+
+# create the country-specific genpop dataframes (no specific audience filtering)
+for (country in countries) {
+  country_dfs <- create_sharing_dfs(kpi, country)  # Country filter, no audience filter
+  all_dfs <- c(all_dfs, country_dfs)
+}
+
+# create dataframes for each specific country and audience type
+for (country in countries) {
+  for (audience in audience_vars) {
+    country_audience_dfs <- create_sharing_dfs(kpi, country, audience)
+    all_dfs <- c(all_dfs, country_audience_dfs)
+  }
+}
+
+# Assign the dataframes to the global environment
+list2env(all_dfs, envir = .GlobalEnv)
+
+```
+
+```{r}
+
+# Function to calculate sharing percentages with confidence intervals
+calculate_sharing_percentages <- function() {
+  # Get all objects in global environment
+  all_objects <- ls(envir = .GlobalEnv)
+  
+  # Create lists to store the summary dataframes
+  sharing_summaries <- list()
+  sharing_summaries_full <- list()
+  
+  # Count how many dataframes we process
+  df_count <- 0
+  
+  # Process each object that is a dataframe and has a "percentage_optimistic" column
+  for (obj_name in all_objects) {
+    # Skip the function itself or any other non-dataframe objects
+    if (obj_name == "calculate_sharing_percentages") next
+    
+    # Try to get the object
+    obj <- tryCatch({
+      get(obj_name, envir = .GlobalEnv)
+    }, error = function(e) {
+      NULL
+    })
+    
+    # Check if it's a dataframe with a percentage_sharing column
+    if (is.data.frame(obj) && "percentage_sharing" %in% names(obj)) {
+      df_count <- df_count + 1
+      
+      # Count total respondents
+      total_count <- nrow(obj)
+      
+      # Count sharing respondents (using the correct case)
+      sharing_count <- sum(obj$percentage_sharing == "Share", na.rm = TRUE)
+      
+      # Calculate percentage
+      sharing_percentage <- (sharing_count / total_count) * 100
+      
+      # Calculate confidence interval (Wilson score interval for proportions)
+      # Using 95% confidence level (z=1.96)
+    #  z <- 1.96
+         # Using 95% confidence level (z=1.96) for 99 % CI use 2.576
+      z <- 2.576
+      p <- sharing_count / total_count
+      
+      # Avoid division by zero
+      if (total_count > 0) {
+        # Wilson score interval formula
+        denominator <- 1 + (z^2/total_count)
+        center <- (p + (z^2/(2*total_count))) / denominator
+        error_margin <- z * sqrt((p*(1-p) + (z^2/(4*total_count))) / total_count) / denominator
+        
+        ci_lower <- max(0, (center - error_margin) * 100)
+        ci_upper <- min(100, (center + error_margin) * 100)
+        
+        # Calculate margin of error in percentage points
+        margin_of_error <- error_margin * 100
+      } else {
+        ci_lower <- NA
+        ci_upper <- NA
+        margin_of_error <- NA
+      }
+      
+      # Calculate full statistics first (we need these for calculations)
+      summary_full <- data.frame(
+        Category = "Sharing",
+        Percentage = round(sharing_percentage, 0),
+        CI_Lower = round(ci_lower, 0),
+        CI_Upper = round(ci_upper, 0),
+        Margin_of_Error = round(margin_of_error, 0),  # Margin of error rounded to nearest whole number
+        Sample_Size = total_count,
+        CI_Range = paste0(round(ci_lower, 0), "% - ", round(ci_upper, 0), "%"),
+        MOE_Display = paste0("+/-", round(margin_of_error, 0), " pp")  # Using +/- instead of ±
+      )
+      
+      # Create a simplified version with only the requested columns
+      summary_df <- summary_full %>%
+        select(Category, Percentage, MOE_Display) %>%
+        mutate(Source = obj_name)  # Add the Source column
+      
+      # Store in our list with a new name
+      summary_name <- paste0(obj_name, "_summary")
+      sharing_summaries[[summary_name]] <- summary_df
+      
+      # Also store the full data in a separate list if needed for reference
+      full_name <- paste0(obj_name, "_summary_full")
+      sharing_summaries_full[[full_name]] <- summary_full
+    }
+  }
+  
+  # Return the list of summaries
+  message(paste("Created", length(sharing_summaries), "sharing summary data frames"))
+  
+  # Return only the simplified summaries
+  return(sharing_summaries)
+}
+
+# EXECUTE THE FUNCTION AND STORE RESULTS
+sharing_summary_dfs <- calculate_sharing_percentages()
+
+# ASSIGN SUMMARIES TO GLOBAL ENVIRONMENT
+list2env(sharing_summary_dfs, envir = .GlobalEnv)
+
+# We'll still create the consolidated tables for reference
+# Function to create a consolidated summary table
+create_sharing_summary_table <- function() {
+  # Get all summary objects
+  all_objects <- ls(pattern = "_summary$", envir = .GlobalEnv)
+  
+  # Create an empty dataframe to hold all summaries
+  all_summaries <- data.frame()
+  
+  # Process each summary
+  for (obj_name in all_objects) {
+    # Skip if object name is our output names to avoid conflicts
+    if(obj_name %in% c("all_sharing_summaries", "all_sharing_summaries_simple")) next
+    
+    # Try to get the summary dataframe
+    summary_df <- tryCatch({
+      get(obj_name, envir = .GlobalEnv)
+    }, error = function(e) {
+      NULL
+    })
+    
+    # Only add if it's actually a dataframe
+    if(is.data.frame(summary_df)) {
+      # Add to the consolidated dataframe
+      all_summaries <- rbind(all_summaries, summary_df)
+    }
+  }
+  
+  # Return the consolidated dataframe
+  return(all_summaries)
+}
+
+# Create the consolidated summaries (but keep all individual summaries too)
+all_sharing_summaries <- create_sharing_summary_table()
+all_sharing_summaries_simple <- all_sharing_summaries %>%
+  select(-MOE_Display)
+
+```
+
+```{r}
+
+## create single trust summary data frame ##
+# Look for objects that end with "_summary" (our trust summary dataframes)
+# Function to combine all trust summary dataframes into a single dataframe
+combine_all_trust_summaries <- function() {
+  # Get all objects in global environment
+  all_objects <- ls(envir = .GlobalEnv)
+  
+  # Initialize an empty dataframe to store all summaries
+  all_summaries <- data.frame()
+  
+  # Look for objects that end with "_summary" (our trust summary dataframes)
+  summary_objects <- grep("_summary$", all_objects, value = TRUE)
+  
+  # Loop through each summary dataframe and append to all_summaries
+  for (obj_name in summary_objects) {
+    # Get the dataframe
+    df <- get(obj_name, envir = .GlobalEnv)
+    
+    # Add the dataframe name as a new column
+    df$Summary_Name <- obj_name
+    
+    # Append to the consolidated dataframe
+    all_summaries <- rbind(all_summaries, df)
+  }
+  
+  # Return the combined dataframe
+  return(all_summaries)
+}
+
+# Execute the function and store the result
+all_trust_summaries <- combine_all_trust_summaries()
+
+# Print information about the combined dataframe
+message(paste("Created combined dataframe with", nrow(all_trust_summaries), "rows"))
+message(paste("Number of unique summaries:", length(unique(all_trust_summaries$Summary_Name))))
+
+# Optional: Save to CSV
+# write.csv(all_trust_summaries, "all_trust_summaries.csv", row.names = FALSE)
+
+# Assign to global environment
+assign("all_trust_summaries", all_trust_summaries, envir = .GlobalEnv)
+
+
+```
+
+
+```{r}
+
+# Save the RData file with all summaries
+
+
+save(list = ls(pattern = "_summary$"), file = "summary_data/top_3_index/kpi_sharing_99_ci.RData")
+
+
+
+
